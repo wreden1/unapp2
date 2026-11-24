@@ -1,4 +1,3 @@
-
 package se.unapp.studio
 
 import android.content.Context
