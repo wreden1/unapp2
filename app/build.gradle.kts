@@ -50,7 +50,7 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.10.0")
 
-    debugImplementation("androidx.compose.ui:ui-tooling")
+    implementation("com.google.ai.edge.litertlm:litertlm-android:0.18.0")
 
-implementation("com.google.ai.edge.litertlm:litertlm-android:0.16.1")
+    debugImplementation("androidx.compose.ui:ui-tooling")
 }
