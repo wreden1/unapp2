@@ -72,19 +72,10 @@ class LocalAiEngine(context: Context) {
                 }
 
             withContext(Dispatchers.IO) {
-                val result = StringBuilder()
-
-                activeConversation
-                    .sendMessageAsync(prompt)
-                    .collect { message ->
-                        val text = message.toString()
-
-                        if (text.isNotEmpty()) {
-                            result.append(text)
-                        }
-                    }
-
-                result.toString().trim()
+                // Use LiteRT-LM's blocking request/response API here.
+                // This avoids leaving the chat waiting for an async Flow completion
+                // callback on devices/runtime versions where streaming does not close.
+                activeConversation.sendMessage(prompt).toString().trim()
             }
         }
     }
