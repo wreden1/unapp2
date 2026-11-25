@@ -328,15 +328,8 @@ private fun CharacterConversation(character: UnAppCharacter, onBack: () -> Unit)
                                 ai.loadModel(model, characterInstruction(character))
                                 status = "AI loaded (" + ai.activeBackend + ")."
                             }
-                            // Supply a bounded transcript from the locally saved chat.
-                            // The engine starts a clean model conversation for every turn.
-                            val recentHistory = updated.dropLast(1).takeLast(12).map { line ->
-                                line.fromUser to line.text
-                            }
-                            val answer = ai.ask(message, recentHistory)
-                            // Use the transcript that already contains the current user message.
-                            // The captured Compose `lines` value may be stale inside this coroutine
-                            // and would otherwise drop the latest user turn.
+                            // LiteRT-LM keeps the complete turn history in its active conversation.
+                            val answer = ai.ask(message)
                             val completedTranscript = updated + CharacterLine(false, answer)
                             lines = completedTranscript
                             putChat(context, character.id, completedTranscript)
