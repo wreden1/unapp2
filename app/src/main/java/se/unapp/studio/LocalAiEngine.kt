@@ -3,12 +3,17 @@ package se.unapp.studio
 import android.content.Context
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Conversation
+import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
-import com.google.ai.edge.litertlm.Contents
-import com.google.ai.edge.litertlm.ConversationConfig
+import com.google.ai.edge.litertlm.Message
+import com.google.ai.edge.litertlm.RepetitionPenaltyConfig
+import com.google.ai.edge.litertlm.NoRepeatNgramConfig
 import com.google.ai.edge.litertlm.SamplerConfig
+import com.google.ai.edge.litertlm.ThinkingConfig
+import com.google.ai.edge.litertlm.Contents
 import java.io.File
+import java.util.concurrent.ThreadLocalRandom
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -29,13 +34,20 @@ class LocalAiEngine(context: Context) {
     val activeBackend: String
         get() = selectedBackend
 
-    private fun conversationConfig() = ConversationConfig(
+    private fun conversationConfig(initialMessages: List<Message> = emptyList()) = ConversationConfig(
         systemInstruction = Contents.of(systemInstruction),
+        initialMessages = initialMessages,
         samplerConfig = SamplerConfig(
-            topK = 40,
-            topP = 0.90,
-            temperature = 0.85
-        )
+            topK = 20,
+            topP = 0.95,
+            temperature = 0.6,
+            seed = ThreadLocalRandom.current().nextInt()
+        ),
+        thinkingConfig = ThinkingConfig(
+            enableThinking = false,
+            thinkingTokenBudget = 0
+        ),
+        maxOutputToken = 512
     )
 
     suspend fun loadModel(modelFile: File, characterInstruction: String) {
@@ -96,11 +108,14 @@ class LocalAiEngine(context: Context) {
     }
 
     /**
-     * Starts each turn with a clean conversation and explicitly supplies a
-     * bounded transcript. This prevents stale internal state from accumulating
-     * or diverging from the chat transcript saved by the UI.
+     * Every request is a fresh model conversation. The prior turns are inserted as
+     * actual user/model messages (not a single plain-text transcript), avoiding the
+     * LiteRT-LM 0.18.x multi-turn KV-cache issue while preserving roleplay context.
      */
-    suspend fun ask(prompt: String, recentHistory: String = ""): String {
+    suspend fun ask(
+        prompt: String,
+        recentHistory: List<Pair<Boolean, String>> = emptyList()
+    ): String {
         require(prompt.isNotBlank()) { "Skriv en fråga först." }
 
         return mutex.withLock {
@@ -110,20 +125,36 @@ class LocalAiEngine(context: Context) {
 
             withContext(Dispatchers.IO) {
                 conversation?.close()
-                val freshConversation = activeEngine.createConversation(conversationConfig())
-                conversation = freshConversation
 
-                val completePrompt = buildString {
-                    if (recentHistory.isNotBlank()) {
-                        append("Recent conversation (context only; do not repeat it):\n")
-                        append(recentHistory)
-                        append("\n\n")
-                    }
-                    append("Respond only to this latest user message. Continue naturally and do not repeat earlier answers:\n")
-                    append(prompt)
+                val initialMessages = recentHistory.map { (fromUser, text) ->
+                    if (fromUser) Message.user(text) else Message.model(text)
                 }
 
-                freshConversation.sendMessage(completePrompt).toString().trim()
+                val freshConversation = activeEngine.createConversation(
+                    conversationConfig(initialMessages)
+                )
+                conversation = freshConversation
+
+                val response = freshConversation.sendMessage(
+                    prompt,
+                    repetitionPenaltyConfig = RepetitionPenaltyConfig(
+                        repetitionPenalty = 1.12f,
+                        presencePenalty = 0.15f,
+                        frequencyPenalty = 0.10f,
+                        windowSize = 512
+                    ),
+                    noRepeatNgramConfig = NoRepeatNgramConfig(
+                        noRepeatNgramSize = 4,
+                        windowSize = 512
+                    ),
+                    maxOutputToken = 512,
+                    thinkingConfig = ThinkingConfig(
+                        enableThinking = false,
+                        thinkingTokenBudget = 0
+                    )
+                )
+
+                response.toString().trim()
             }
         }
     }
