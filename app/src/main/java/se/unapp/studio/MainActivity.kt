@@ -10,6 +10,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.*
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -71,6 +73,7 @@ fun UnAppScreen() {
 
     var prompt by remember { mutableStateOf("") }
     var result by remember { mutableStateOf("") }
+    var showCharacterStudio by remember { mutableStateOf(false) }
     var savedProjects by remember {
         mutableStateOf(loadProjects(context))
     }
@@ -185,6 +188,13 @@ fun UnAppScreen() {
                                 "Skapa app med AI",
                                 fontWeight = FontWeight.Bold
                             )
+                        }
+
+                        OutlinedButton(
+                            onClick = { showCharacterStudio = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Character Studio")
                         }
 
                         if (result.isNotEmpty()) {
@@ -316,6 +326,14 @@ fun UnAppScreen() {
                     }
                     Spacer(Modifier.height(28.dp))
                 }
+            }
+        }
+        if (showCharacterStudio) {
+            Dialog(
+                onDismissRequest = { showCharacterStudio = false },
+                properties = DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                CharacterStudioScreen(onClose = { showCharacterStudio = false })
             }
         }
     }
