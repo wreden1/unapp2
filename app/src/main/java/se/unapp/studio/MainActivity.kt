@@ -1,5 +1,6 @@
 package se.unapp.studio
 
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -10,18 +11,52 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.json.JSONArray
 
 private val Ink = Color(0xFF0B1020)
 private val Panel = Color(0xFF151D32)
 private val Accent = Color(0xFF8B7CFF)
 private val Muted = Color(0xFFAAB4CC)
+
+private const val PREFS_NAME = "unapp_projects"
+private const val PROJECTS_KEY = "projects"
+
+private fun loadProjects(context: Context): List<String> {
+    val prefs = context.getSharedPreferences(
+        PREFS_NAME, Context.MODE_PRIVATE
+    )
+    val saved = prefs.getString(PROJECTS_KEY, "[]") ?: "[]"
+
+    return try {
+        val array = JSONArray(saved)
+        List(array.length()) { index ->
+            array.getString(index)
+        }
+    } catch (_: Exception) {
+        emptyList()
+    }
+}
+
+private fun saveProjects(
+    context: Context,
+    projects: List<String>
+) {
+    val array = JSONArray()
+    projects.forEach { array.put(it) }
+
+    context.getSharedPreferences(
+        PREFS_NAME, Context.MODE_PRIVATE
+    ).edit()
+        .putString(PROJECTS_KEY, array.toString())
+        .apply()
+}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -32,9 +67,13 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun UnAppScreen() {
+    val context = LocalContext.current
+
     var prompt by remember { mutableStateOf("") }
     var result by remember { mutableStateOf("") }
-    var selectedTab by remember { mutableStateOf("Skapa") }
+    var savedProjects by remember {
+        mutableStateOf(loadProjects(context))
+    }
 
     MaterialTheme(
         colorScheme = darkColorScheme(
@@ -127,22 +166,14 @@ fun UnAppScreen() {
 
                         Button(
                             onClick = {
-                                result = """
-                                    APP-PROJEKT SKAPAT
+                                val idea = prompt.trim()
+                                val updated = savedProjects + idea
 
-                                    Appens idé:
-                                    $prompt
+                                savedProjects = updated
+                                saveProjects(context, updated)
 
-                                    PLANERADE DELAR:
-                                    1. Appens startsida
-                                    2. Appens funktioner
-                                    3. Design och färger
-                                    4. Navigation mellan sidor
-                                    5. Förberedelse för APK
-
-                                    Nästa steg är att låta UnApps
-                                    lokala AI skapa projektets kod.
-                                """.trimIndent()
+                                result = "APP-IDÉ SPARAD!\n\n$idea\n\nDu hittar den nu under Mina appar."
+                                prompt = ""
                             },
                             enabled = prompt.isNotBlank(),
                             modifier = Modifier
@@ -170,36 +201,91 @@ fun UnAppScreen() {
 
                 item {
                     Text(
+                        "MINA APPAR",
+                        color = Accent,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "Dina sparade appidéer",
+                        color = Muted,
+                        fontSize = 13.sp
+                    )
+                }
+
+                if (savedProjects.isEmpty()) {
+                    item {
+                        FeatureCard(
+                            "Inga appar ännu",
+                            "Skapa din första appidé ovan"
+                        )
+                    }
+                } else {
+                    items(savedProjects.size) { index ->
+                        Column(
+                            Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    Panel,
+                                    RoundedCornerShape(16.dp)
+                                )
+                                .padding(14.dp)
+                        ) {
+                            Text(
+                                "APP ${index + 1}",
+                                color = Accent,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                savedProjects[index],
+                                color = Color.White,
+                                fontSize = 14.sp
+                            )
+                            Spacer(Modifier.height(10.dp))
+                            OutlinedButton(
+                                onClick = {
+                                    val updated = savedProjects
+                                        .filterIndexed { i, _ -> i != index }
+
+                                    savedProjects = updated
+                                    saveProjects(context, updated)
+                                }
+                            ) {
+                                Text("Ta bort")
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    Text(
                         "DIN APPSTUDIO",
                         color = Muted,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        FeatureCard(
-                            "Mina appar",
-                            "Dina projekt",
-                            Modifier.weight(1f)
-                        )
+                    Row(
+                        horizontalArrangement =
+                            Arrangement.spacedBy(10.dp)
+                    ) {
                         FeatureCard(
                             "Förhandsvisa",
                             "Testa design",
                             Modifier.weight(1f)
                         )
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         FeatureCard(
                             "Kod & design",
                             "Full kontroll",
                             Modifier.weight(1f)
                         )
-                        FeatureCard(
-                            "Bygg APK",
-                            "Installera appar",
-                            Modifier.weight(1f)
-                        )
                     }
+                    Spacer(Modifier.height(10.dp))
+                    FeatureCard(
+                        "Bygg APK",
+                        "Installera appar"
+                    )
                 }
 
                 item {
@@ -223,7 +309,7 @@ fun UnAppScreen() {
                         )
                         Spacer(Modifier.height(6.dp))
                         Text(
-                            "Status: Projektplanering fungerar. Lokal AI och APK-byggare återstår.",
+                            "Status: Appidéer kan sparas lokalt. Lokal AI och automatisk APK-byggare återstår.",
                             color = Muted,
                             fontSize = 12.sp
                         )
