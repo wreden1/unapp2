@@ -334,8 +334,12 @@ private fun CharacterConversation(character: UnAppCharacter, onBack: () -> Unit)
                                 line.fromUser to line.text
                             }
                             val answer = ai.ask(message, recentHistory)
-                            lines = lines + CharacterLine(false, answer)
-                            putChat(context, character.id, lines)
+                            // Use the transcript that already contains the current user message.
+                            // The captured Compose `lines` value may be stale inside this coroutine
+                            // and would otherwise drop the latest user turn.
+                            val completedTranscript = updated + CharacterLine(false, answer)
+                            lines = completedTranscript
+                            putChat(context, character.id, completedTranscript)
                             status = "Reply generated on this phone."
                         } catch (e: Exception) { status = e.message ?: "AI reply failed." }
                         finally { busy = false }
