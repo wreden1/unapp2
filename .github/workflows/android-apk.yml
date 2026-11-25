@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - feature/character-studio
   pull_request:
     branches:
       - main
