@@ -103,8 +103,9 @@ fun CharacterStudioScreen(onClose: () -> Unit) {
         when {
             active != null -> CharacterConversation(active!!, onBack = { active = null })
             editing -> CharacterForm(
-                onCancel = { editing = false },
-                onSave = { c -> characters = characters.filterNot { it.id == c.id } + c; putCharacters(context, characters); editing = false }
+                existing = active,
+                onCancel = { editing = false; active = null },
+                onSave = { c -> characters = characters.filterNot { it.id == c.id } + c; putCharacters(context, characters); editing = false; active = null }
             )
             else -> {
                 Text("Bring your characters to life", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
@@ -132,7 +133,7 @@ fun CharacterStudioScreen(onClose: () -> Unit) {
                                 }
                                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                     Button(onClick = { active = c }, modifier = Modifier.weight(1f)) { Text("Chat") }
-                                    OutlinedButton(onClick = { editing = true }) { Text("Edit") }
+                                    OutlinedButton(onClick = { active = c; editing = true }) { Text("Edit") }
                                     OutlinedButton(onClick = { characters = characters.filterNot { it.id == c.id }; putCharacters(context, characters) }) { Text("Delete") }
                                 }
                             }
@@ -145,22 +146,22 @@ fun CharacterStudioScreen(onClose: () -> Unit) {
 }
 
 @Composable
-private fun CharacterForm(onCancel: () -> Unit, onSave: (UnAppCharacter) -> Unit) {
+private fun CharacterForm(existing: UnAppCharacter?, onCancel: () -> Unit, onSave: (UnAppCharacter) -> Unit) {
     val context = LocalContext.current
-    var name by remember { mutableStateOf("") }
-    var age by remember { mutableStateOf("25") }
-    var appearance by remember { mutableStateOf("") }
-    var personality by remember { mutableStateOf("") }
-    var history by remember { mutableStateOf("") }
-    var voice by remember { mutableStateOf("") }
-    var picture by remember { mutableStateOf<String?>(null) }
+    var name by remember(existing?.id) { mutableStateOf(existing?.name ?: "") }
+    var age by remember(existing?.id) { mutableStateOf(existing?.age ?: "25") }
+    var appearance by remember(existing?.id) { mutableStateOf(existing?.appearance ?: "") }
+    var personality by remember(existing?.id) { mutableStateOf(existing?.personality ?: "") }
+    var history by remember(existing?.id) { mutableStateOf(existing?.background ?: "") }
+    var voice by remember(existing?.id) { mutableStateOf(existing?.speakingStyle ?: "") }
+    var picture by remember(existing?.id) { mutableStateOf(existing?.imageUri) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) {
             try { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) { }
             picture = uri.toString()
         }
     }
-    Text("Create your character", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+    Text(if (existing == null) "Create your character" else "Edit your character", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
     Text("Describe the character in your own words.", color = CSMuted, fontSize = 12.sp)
     Spacer(Modifier.height(10.dp))
     LazyColumn(Modifier.fillMaxHeight(0.72f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -187,7 +188,7 @@ private fun CharacterForm(onCancel: () -> Unit, onSave: (UnAppCharacter) -> Unit
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text("Cancel") }
         Button(
-            onClick = { val n = age.toIntOrNull(); if (name.isNotBlank() && n != null && n > 0) onSave(UnAppCharacter(name = name.trim(), age = n.toString(), appearance = appearance, personality = personality, background = history, speakingStyle = voice, imageUri = picture)) },
+            onClick = { val n = age.toIntOrNull(); if (name.isNotBlank() && n != null && n > 0) onSave(UnAppCharacter(id = existing?.id ?: UUID.randomUUID().toString(), name = name.trim(), age = n.toString(), appearance = appearance, personality = personality, background = history, speakingStyle = voice, imageUri = picture)) },
             enabled = name.isNotBlank() && (age.toIntOrNull() ?: 0) > 0,
             modifier = Modifier.weight(1f)
         ) { Text("Save character") }
