@@ -15,7 +15,7 @@ object ModelDownloader {
         "Qwen3-1.7B_dynamic_wi4b32_afp32.litertlm"
 
     private const val MODEL_URL =
-        "https://huggingface.co/litert-community/Qwen3-1.7B/resolve/main/Qwen3-1.7B_dynamic_wi4b32_afp32.litertlm"
+        "https://huggingface.co/litert-community/Qwen3-1.7B/resolve/d9b8a91/Qwen3-1.7B_dynamic_wi4b32_afp32.litertlm?download=true"
 
     private const val EXPECTED_SHA256 =
         "2eeffef7b51bc3e1225ea69fe7aa5f417397934b56a5b6c20cc068d6fd2c918b"
@@ -100,8 +100,9 @@ object ModelDownloader {
                 "Nedladdningen blev ofullständig."
             }
 
-            check(sha256(temporary) == EXPECTED_SHA256) {
-                "Modellfilens kontrollsumma stämmer inte."
+            val actualSha256 = sha256(temporary)
+            check(actualSha256 == EXPECTED_SHA256) {
+                "Modellfilens kontrollsumma stämmer inte. Förväntad: $EXPECTED_SHA256. Fick: $actualSha256"
             }
 
             if (destination.exists()) {
@@ -136,8 +137,8 @@ object ModelDownloader {
             }
         }
 
-        return digest.digest().joinToString("") {
-            "%02x".format(it)
+        return digest.digest().joinToString("") { byte ->
+            "%02x".format(byte.toInt() and 0xff)
         }
     }
 }
