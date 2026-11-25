@@ -5,6 +5,9 @@ import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Conversation
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
+import com.google.ai.edge.litertlm.Contents
+import com.google.ai.edge.litertlm.ConversationConfig
+import com.google.ai.edge.litertlm.SamplerConfig
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collect
@@ -33,7 +36,7 @@ class LocalAiEngine(context: Context) {
      * Tries GPU acceleration first. If the device's GPU runtime or driver
      * cannot initialize this model, safely falls back to CPU.
      */
-    suspend fun loadModel(modelFile: File) {
+    suspend fun loadModel(modelFile: File, characterInstruction: String) {
         mutex.withLock {
             require(modelFile.isFile) {
                 "AI-modellen hittades inte: ${modelFile.absolutePath}"
@@ -54,7 +57,12 @@ class LocalAiEngine(context: Context) {
                     )
                     try {
                         gpuEngine.initialize()
-                        val gpuConversation = gpuEngine.createConversation()
+                        val gpuConversation = gpuEngine.createConversation(
+                            ConversationConfig(
+                                systemInstruction = Contents.of(characterInstruction),
+                                samplerConfig = SamplerConfig(topK = 40, topP = 0.90, temperature = 0.85)
+                            )
+                        )
                         engine = gpuEngine
                         conversation = gpuConversation
                         selectedBackend = "GPU"
@@ -77,7 +85,12 @@ class LocalAiEngine(context: Context) {
 
                 try {
                     cpuEngine.initialize()
-                    val cpuConversation = cpuEngine.createConversation()
+                    val cpuConversation = cpuEngine.createConversation(
+                        ConversationConfig(
+                            systemInstruction = Contents.of(characterInstruction),
+                            samplerConfig = SamplerConfig(topK = 40, topP = 0.90, temperature = 0.85)
+                        )
+                    )
                     engine = cpuEngine
                     conversation = cpuConversation
                     selectedBackend = "CPU (GPU stöds inte här)"

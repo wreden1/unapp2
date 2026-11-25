@@ -56,6 +56,23 @@ data class UnAppCharacter(
 )
 private data class CharacterLine(val fromUser: Boolean, val text: String)
 
+private fun characterInstruction(character: UnAppCharacter): String =
+    """
+    You are roleplaying as the fictional adult character ${character.name}, age ${character.age}.
+    Appearance: ${character.appearance}.
+    Personality: ${character.personality}.
+    Background and memories: ${character.background}.
+    Speaking style: ${character.speakingStyle}.
+
+    Stay in character and speak naturally in first person. Respond directly to the user's
+    latest message and its specific details. Do not reuse a fixed greeting, canned response,
+    or repeat previous answers. Make each reply meaningfully different and relevant.
+    Remember details from earlier turns in this conversation. Do not narrate the user's
+    thoughts or actions. Keep the conversation interactive and let the character's
+    personality show through actions, opinions, feelings, and natural follow-up questions.
+    This is fictional roleplay. Any adult-themed scenario involves adults aged 18 or older.
+    """.trimIndent()
+
 private fun getCharacters(context: Context): List<UnAppCharacter> {
     val raw = context.getSharedPreferences(CSPrefs, Context.MODE_PRIVATE).getString("characters", "[]") ?: "[]"
     return try {
@@ -243,7 +260,7 @@ private fun CharacterConversation(character: UnAppCharacter, onBack: () -> Unit)
                     scope.launch {
                         try {
                             ModelDownloader.download(context) { progress = it }
-                            ai.loadModel(model)
+                            ai.loadModel(model, characterInstruction(character))
                             status = "Offline AI ready (" + ai.activeBackend + ")."
                         } catch (e: Exception) { status = e.message ?: "Download failed." }
                         finally { busy = false }
@@ -254,7 +271,7 @@ private fun CharacterConversation(character: UnAppCharacter, onBack: () -> Unit)
             OutlinedButton(onClick = {
                 busy = true
                 scope.launch {
-                    try { ai.loadModel(model); status = "Offline AI ready." }
+                    try { ai.loadModel(model, characterInstruction(character)); status = "Offline AI ready." }
                     catch (e: Exception) { status = e.message ?: "Could not load AI." }
                     finally { busy = false }
                 }
@@ -308,16 +325,12 @@ private fun CharacterConversation(character: UnAppCharacter, onBack: () -> Unit)
                         try {
                             if (!ai.isLoaded()) {
                                 check(model.exists()) { "Download the offline AI model first." }
-                                ai.loadModel(model)
+                                ai.loadModel(model, characterInstruction(character))
                                 status = "AI loaded (" + ai.activeBackend + ")."
                             }
-                            val historyText = updated.takeLast(16).joinToString("\n") { (if (it.fromUser) "User: " else character.name + ": ") + it.text }
-                            val prompt = "Roleplay as fictional character " + character.name + ". Age: " + character.age +
-                                ". Appearance: " + character.appearance + ". Personality: " + character.personality +
-                                ". Background: " + character.background + ". Speaking style: " + character.speakingStyle +
-                                ". Stay consistent and reply naturally in first person. Treat this as fictional roleplay. Adult themes only involve adults. Conversation:\n" + historyText +
-                                "\nReply as " + character.name + " to the latest user message."
-                            val answer = ai.ask(prompt)
+                            // LiteRT-LM maintains the conversation history internally.
+                            // Send only the new turn to avoid duplicating the transcript.
+                            val answer = ai.ask(message)
                             lines = lines + CharacterLine(false, answer)
                             putChat(context, character.id, lines)
                             status = "Reply generated on this phone."
