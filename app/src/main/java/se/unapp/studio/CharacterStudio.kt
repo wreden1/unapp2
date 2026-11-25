@@ -260,7 +260,7 @@ private fun CharacterConversation(character: UnAppCharacter, onBack: () -> Unit)
                     scope.launch {
                         try {
                             ModelDownloader.download(context) { progress = it }
-                            ai.loadModel(model, characterInstruction(character))
+                            ai.loadModel(model, characterInstruction(character), lines.takeLast(12).map { it.fromUser to it.text })
                             status = "Offline AI ready (" + ai.activeBackend + ")."
                         } catch (e: Exception) { status = e.message ?: "Download failed." }
                         finally { busy = false }
@@ -271,7 +271,7 @@ private fun CharacterConversation(character: UnAppCharacter, onBack: () -> Unit)
             OutlinedButton(onClick = {
                 busy = true
                 scope.launch {
-                    try { ai.loadModel(model, characterInstruction(character)); status = "Offline AI ready." }
+                    try { ai.loadModel(model, characterInstruction(character), lines.takeLast(12).map { it.fromUser to it.text }); status = "Offline AI ready." }
                     catch (e: Exception) { status = e.message ?: "Could not load AI." }
                     finally { busy = false }
                 }
@@ -325,7 +325,7 @@ private fun CharacterConversation(character: UnAppCharacter, onBack: () -> Unit)
                         try {
                             if (!ai.isLoaded()) {
                                 check(model.exists()) { "Download the offline AI model first." }
-                                ai.loadModel(model, characterInstruction(character))
+                                ai.loadModel(model, characterInstruction(character), updated.dropLast(1).takeLast(12).map { it.fromUser to it.text })
                                 status = "AI loaded (" + ai.activeBackend + ")."
                             }
                             // LiteRT-LM keeps the complete turn history in its active conversation.
