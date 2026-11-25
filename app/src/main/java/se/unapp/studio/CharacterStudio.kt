@@ -163,7 +163,7 @@ private fun CharacterForm(onCancel: () -> Unit, onSave: (UnAppCharacter) -> Unit
     Text("Create your character", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
     Text("Describe the character in your own words.", color = CSMuted, fontSize = 12.sp)
     Spacer(Modifier.height(10.dp))
-    LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    LazyColumn(Modifier.fillMaxHeight(0.72f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 CharacterPicture(picture, Modifier.size(72.dp))
