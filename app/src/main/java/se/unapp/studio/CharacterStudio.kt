@@ -244,7 +244,7 @@ private fun CharacterConversation(character: UnAppCharacter, onBack: () -> Unit)
                         try {
                             ModelDownloader.download(context) { progress = it }
                             ai.loadModel(model)
-                            status = "Offline AI ready."
+                            status = "Offline AI ready (" + ai.activeBackend + ")."
                         } catch (e: Exception) { status = e.message ?: "Download failed." }
                         finally { busy = false }
                     }
@@ -309,6 +309,7 @@ private fun CharacterConversation(character: UnAppCharacter, onBack: () -> Unit)
                             if (!ai.isLoaded()) {
                                 check(model.exists()) { "Download the offline AI model first." }
                                 ai.loadModel(model)
+                                status = "AI loaded (" + ai.activeBackend + ")."
                             }
                             val historyText = updated.takeLast(16).joinToString("\n") { (if (it.fromUser) "User: " else character.name + ": ") + it.text }
                             val prompt = "Roleplay as fictional character " + character.name + ". Age: " + character.age +
