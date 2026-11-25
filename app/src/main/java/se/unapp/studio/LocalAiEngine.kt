@@ -13,6 +13,7 @@ import com.google.ai.edge.litertlm.SamplerConfig
 import com.google.ai.edge.litertlm.ThinkingConfig
 import com.google.ai.edge.litertlm.Contents
 import java.io.File
+import java.util.Locale
 import java.util.concurrent.ThreadLocalRandom
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -34,13 +35,16 @@ class LocalAiEngine(context: Context) {
     val activeBackend: String
         get() = selectedBackend
 
-    private fun conversationConfig(initialMessages: List<Message> = emptyList()) = ConversationConfig(
+    private fun conversationConfig(
+        initialMessages: List<Message> = emptyList(),
+        temperature: Double = 0.72
+    ) = ConversationConfig(
         systemInstruction = Contents.of(systemInstruction),
         initialMessages = initialMessages,
         samplerConfig = SamplerConfig(
-            topK = 20,
-            topP = 0.95,
-            temperature = 0.6,
+            topK = 32,
+            topP = 0.92,
+            temperature = temperature,
             seed = ThreadLocalRandom.current().nextInt()
         ),
         thinkingConfig = ThinkingConfig(
@@ -56,7 +60,18 @@ class LocalAiEngine(context: Context) {
                 "AI-modellen hittades inte: ${modelFile.absolutePath}"
             }
 
-            if (engine != null && conversation != null) return@withLock
+            // The model engine can be reused, but a character change must reset the
+            // conversation and install the new system instruction.
+            if (engine != null) {
+                withContext(Dispatchers.IO) {
+                    if (systemInstruction != characterInstruction || conversation == null) {
+                        systemInstruction = characterInstruction
+                        conversation?.close()
+                        conversation = engine?.createConversation(conversationConfig())
+                    }
+                }
+                return@withLock
+            }
 
             withContext(Dispatchers.IO) {
                 systemInstruction = characterInstruction
@@ -107,10 +122,40 @@ class LocalAiEngine(context: Context) {
         }
     }
 
+    private fun normalizeForComparison(text: String): String =
+        text.lowercase(Locale.ROOT)
+            .replace(Regex("[^\\p{L}\\p{N}\\s]"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+    private fun isTooSimilar(candidate: String, previous: List<String>): Boolean {
+        val normalized = normalizeForComparison(candidate)
+        if (normalized.isBlank()) return true
+
+        return previous.any { old ->
+            val other = normalizeForComparison(old)
+            if (other.isBlank()) {
+                false
+            } else if (normalized == other) {
+                true
+            } else {
+                val a = normalized.split(" ").filter { it.length > 2 }.toSet()
+                val b = other.split(" ").filter { it.length > 2 }.toSet()
+                if (a.size < 8 || b.size < 8) {
+                    false
+                } else {
+                    val overlap = a.intersect(b).size.toDouble()
+                    val similarity = overlap / a.union(b).size.coerceAtLeast(1)
+                    similarity >= 0.78
+                }
+            }
+        }
+    }
+
     /**
-     * Every request is a fresh model conversation. The prior turns are inserted as
-     * actual user/model messages (not a single plain-text transcript), avoiding the
-     * LiteRT-LM 0.18.x multi-turn KV-cache issue while preserving roleplay context.
+     * A clean native conversation is created for each turn to avoid the LiteRT-LM
+     * multi-turn cache issue. Repeated/near-identical replies are detected and
+     * automatically regenerated with a different sampling temperature.
      */
     suspend fun ask(
         prompt: String,
@@ -124,37 +169,75 @@ class LocalAiEngine(context: Context) {
             }
 
             withContext(Dispatchers.IO) {
-                conversation?.close()
-
                 val initialMessages = recentHistory.map { (fromUser, text) ->
                     if (fromUser) Message.user(text) else Message.model(text)
                 }
+                val previousReplies = recentHistory
+                    .filter { !it.first }
+                    .map { it.second }
+                    .takeLast(5)
+                val candidates = mutableListOf<String>()
+                var bestAnswer = ""
 
-                val freshConversation = activeEngine.createConversation(
-                    conversationConfig(initialMessages)
-                )
-                conversation = freshConversation
-
-                val response = freshConversation.sendMessage(
-                    prompt,
-                    repetitionPenaltyConfig = RepetitionPenaltyConfig(
-                        repetitionPenalty = 1.12f,
-                        presencePenalty = 0.15f,
-                        frequencyPenalty = 0.10f,
-                        windowSize = 512
-                    ),
-                    noRepeatNgramConfig = NoRepeatNgramConfig(
-                        noRepeatNgramSize = 4,
-                        windowSize = 512
-                    ),
-                    maxOutputToken = 512,
-                    thinkingConfig = ThinkingConfig(
-                        enableThinking = false,
-                        thinkingTokenBudget = 0
+                // First attempt is normal; retries explicitly ask for a genuinely
+                // different response and use more varied sampling.
+                for (attempt in 0..2) {
+                    conversation?.close()
+                    val freshConversation = activeEngine.createConversation(
+                        conversationConfig(
+                            initialMessages = initialMessages,
+                            temperature = when (attempt) {
+                                0 -> 0.72
+                                1 -> 0.86
+                                else -> 0.94
+                            }
+                        )
                     )
-                )
+                    conversation = freshConversation
 
-                response.toString().trim()
+                    val retryInstruction = if (attempt == 0) {
+                        prompt
+                    } else {
+                        prompt + "\n\n[Internal response guidance: Your previous draft was too similar " +
+                            "to something already said. Answer the latest message in a clearly different " +
+                            "way. Introduce a new relevant thought, action, detail, or question. Do not " +
+                            "paraphrase or repeat earlier wording. Stay in character.]"
+                    }
+
+                    val response = freshConversation.sendMessage(
+                        retryInstruction,
+                        repetitionPenaltyConfig = RepetitionPenaltyConfig(
+                            repetitionPenalty = 1.18f,
+                            presencePenalty = 0.22f,
+                            frequencyPenalty = 0.16f,
+                            windowSize = 512
+                        ),
+                        noRepeatNgramConfig = NoRepeatNgramConfig(
+                            noRepeatNgramSize = 4,
+                            windowSize = 512
+                        ),
+                        maxOutputToken = 512,
+                        thinkingConfig = ThinkingConfig(
+                            enableThinking = false,
+                            thinkingTokenBudget = 0
+                        )
+                    )
+
+                    val answer = response.toString().trim()
+                    if (answer.isNotBlank()) {
+                        if (bestAnswer.isBlank()) bestAnswer = answer
+                        val comparisonSet = previousReplies + candidates
+                        if (!isTooSimilar(answer, comparisonSet)) {
+                            return@withContext answer
+                        }
+                        candidates.add(answer)
+                        bestAnswer = answer
+                    }
+                }
+
+                // If all attempts are similar, return the latest non-empty generation
+                // rather than blocking the chat or returning an error.
+                bestAnswer.ifBlank { "Jag tappade tråden en stund. Kan du säga det på ett annat sätt?" }
             }
         }
     }
