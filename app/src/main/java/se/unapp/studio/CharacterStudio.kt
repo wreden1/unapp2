@@ -6,6 +6,12 @@ import android.net.Uri
 import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -205,6 +211,17 @@ private fun CharacterConversation(character: UnAppCharacter, onBack: () -> Unit)
     var status by remember { mutableStateOf("Chat history is stored locally.") }
     var busy by remember { mutableStateOf(false) }
     var progress by remember { mutableIntStateOf(0) }
+    val typingTransition = rememberInfiniteTransition(label = "typing dots")
+    val typingStep by typingTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 3.99f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 900, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "typing step"
+    )
+    val typingDots = ".".repeat(typingStep.toInt().coerceIn(1, 3))
     val model = remember { ModelDownloader.modelFile(context) }
     Column(Modifier.fillMaxSize()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -256,6 +273,17 @@ private fun CharacterConversation(character: UnAppCharacter, onBack: () -> Unit)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = if (line.fromUser) Arrangement.End else Arrangement.Start) {
                     Box(Modifier.widthIn(max = 290.dp).background(if (line.fromUser) Color(0xFF39305F) else CSPanel, RoundedCornerShape(14.dp)).padding(12.dp)) {
                         Text(line.text, color = Color.White, fontSize = 14.sp)
+                    }
+                }
+            }
+            if (busy && model.exists()) {
+                item(key = "typing_indicator") {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+                        Box(
+                            Modifier.background(CSPanel, RoundedCornerShape(14.dp)).padding(horizontal = 12.dp, vertical = 9.dp)
+                        ) {
+                            Text(character.name + " skriver" + typingDots, color = CSMuted, fontSize = 13.sp)
+                        }
                     }
                 }
             }
