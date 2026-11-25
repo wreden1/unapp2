@@ -37,13 +37,13 @@ class LocalAiEngine(context: Context) {
 
     private fun conversationConfig(
         initialMessages: List<Message> = emptyList(),
-        temperature: Double = 0.72
+        temperature: Double = 0.85
     ) = ConversationConfig(
         systemInstruction = Contents.of(systemInstruction),
         initialMessages = initialMessages,
         samplerConfig = SamplerConfig(
-            topK = 32,
-            topP = 0.92,
+            topK = 40,
+            topP = 0.90,
             temperature = temperature,
             seed = ThreadLocalRandom.current().nextInt()
         ),
@@ -150,10 +150,14 @@ class LocalAiEngine(context: Context) {
                 val response = activeConversation.sendMessage(
                     prompt,
                     repetitionPenaltyConfig = RepetitionPenaltyConfig(
-                        repetitionPenalty = 1.08f,
-                        presencePenalty = 0.0f,
-                        frequencyPenalty = 0.0f,
-                        windowSize = 256
+                        repetitionPenalty = 1.12f,
+                        presencePenalty = 0.08f,
+                        frequencyPenalty = 0.08f,
+                        windowSize = 512
+                    ),
+                    noRepeatNgramConfig = NoRepeatNgramConfig(
+                        noRepeatNgramSize = 4,
+                        windowSize = 512
                     ),
                     maxOutputToken = 512,
                     thinkingConfig = ThinkingConfig(
