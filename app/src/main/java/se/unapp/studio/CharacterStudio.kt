@@ -330,8 +330,8 @@ private fun CharacterConversation(character: UnAppCharacter, onBack: () -> Unit)
                             }
                             // Supply a bounded transcript from the locally saved chat.
                             // The engine starts a clean model conversation for every turn.
-                            val recentHistory = updated.dropLast(1).takeLast(12).joinToString("\n") { line ->
-                                (if (line.fromUser) "User: " else character.name + ": ") + line.text
+                            val recentHistory = updated.dropLast(1).takeLast(12).map { line ->
+                                line.fromUser to line.text
                             }
                             val answer = ai.ask(message, recentHistory)
                             lines = lines + CharacterLine(false, answer)
