@@ -21,6 +21,7 @@ class LocalAiEngine(context: Context) {
 
     private var engine: Engine? = null
     private var conversation: Conversation? = null
+    private var systemInstruction: String = ""
 
     @Volatile
     private var selectedBackend: String = "Not loaded"
@@ -28,18 +29,25 @@ class LocalAiEngine(context: Context) {
     val activeBackend: String
         get() = selectedBackend
 
-    /**
-     * Loads a downloaded .litertlm model from local storage.
-     */
+    private fun conversationConfig() = ConversationConfig(
+        systemInstruction = Contents.of(systemInstruction),
+        samplerConfig = SamplerConfig(
+            topK = 40,
+            topP = 0.90,
+            temperature = 0.85
+        )
+    )
+
     suspend fun loadModel(modelFile: File, characterInstruction: String) {
         mutex.withLock {
             require(modelFile.isFile) {
                 "AI-modellen hittades inte: ${modelFile.absolutePath}"
             }
 
-            if (conversation != null) return@withLock
+            if (engine != null && conversation != null) return@withLock
 
             withContext(Dispatchers.IO) {
+                systemInstruction = characterInstruction
                 var gpuError: Throwable? = null
 
                 try {
@@ -52,12 +60,7 @@ class LocalAiEngine(context: Context) {
                     )
                     try {
                         gpuEngine.initialize()
-                        val gpuConversation = gpuEngine.createConversation(
-                            ConversationConfig(
-                                systemInstruction = Contents.of(characterInstruction),
-                                samplerConfig = SamplerConfig(topK = 50, topP = 0.95, temperature = 1.0)
-                            )
-                        )
+                        val gpuConversation = gpuEngine.createConversation(conversationConfig())
                         engine = gpuEngine
                         conversation = gpuConversation
                         selectedBackend = "GPU"
@@ -77,15 +80,9 @@ class LocalAiEngine(context: Context) {
                         cacheDir = appContext.cacheDir.absolutePath
                     )
                 )
-
                 try {
                     cpuEngine.initialize()
-                    val cpuConversation = cpuEngine.createConversation(
-                        ConversationConfig(
-                            systemInstruction = Contents.of(characterInstruction),
-                            samplerConfig = SamplerConfig(topK = 50, topP = 0.95, temperature = 1.0)
-                        )
-                    )
+                    val cpuConversation = cpuEngine.createConversation(conversationConfig())
                     engine = cpuEngine
                     conversation = cpuConversation
                     selectedBackend = "CPU (GPU stöds inte här)"
@@ -99,44 +96,50 @@ class LocalAiEngine(context: Context) {
     }
 
     /**
-     * Sends exactly one user message and returns exactly one model response.
-     * Do not inject retry/correction messages into the persistent conversation:
-     * those messages become part of its history and can create repetition loops.
+     * Starts each turn with a clean conversation and explicitly supplies a
+     * bounded transcript. This prevents stale internal state from accumulating
+     * or diverging from the chat transcript saved by the UI.
      */
-    suspend fun ask(prompt: String): String {
-        require(prompt.isNotBlank()) {
-            "Skriv en fråga först."
-        }
+    suspend fun ask(prompt: String, recentHistory: String = ""): String {
+        require(prompt.isNotBlank()) { "Skriv en fråga först." }
 
         return mutex.withLock {
-            val activeConversation =
-                checkNotNull(conversation) {
-                    "AI-modellen är inte laddad ännu."
-                }
+            val activeEngine = checkNotNull(engine) {
+                "AI-modellen är inte laddad ännu."
+            }
 
             withContext(Dispatchers.IO) {
-                activeConversation.sendMessage(prompt).toString().trim()
+                conversation?.close()
+                val freshConversation = activeEngine.createConversation(conversationConfig())
+                conversation = freshConversation
+
+                val completePrompt = buildString {
+                    if (recentHistory.isNotBlank()) {
+                        append("Recent conversation (context only; do not repeat it):\n")
+                        append(recentHistory)
+                        append("\n\n")
+                    }
+                    append("Respond only to this latest user message. Continue naturally and do not repeat earlier answers:\n")
+                    append(prompt)
+                }
+
+                freshConversation.sendMessage(completePrompt).toString().trim()
             }
         }
     }
 
-    /**
-     * Releases the model and conversation resources.
-     */
     suspend fun close() {
         mutex.withLock {
             withContext(Dispatchers.IO) {
                 conversation?.close()
                 conversation = null
-
                 engine?.close()
                 engine = null
+                systemInstruction = ""
                 selectedBackend = "Not loaded"
             }
         }
     }
 
-    fun isLoaded(): Boolean {
-        return engine != null && conversation != null
-    }
+    fun isLoaded(): Boolean = engine != null && conversation != null
 }
