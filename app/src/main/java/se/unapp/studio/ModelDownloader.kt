@@ -15,7 +15,7 @@ object ModelDownloader {
         "Qwen3-1.7B_dynamic_wi4b32_afp32.litertlm"
 
     private const val MODEL_URL =
-        "https://huggingface.co/litert-community/Qwen3-1.7B/resolve/87603f0ff3fe74b9b77ed0477edb773b4b596f32/Qwen3-1.7B_dynamic_wi4b32_afp32.litertlm?download=true"
+        "https://huggingface.co/litert-community/Qwen3-1.7B/resolve/d9b8a91/Qwen3-1.7B_dynamic_wi4b32_afp32.litertlm?download=true"
 
     private const val EXPECTED_SHA256 =
         "2eeffef7b51bc3e1225ea69fe7aa5f417397934b56a5b6c20cc068d6fd2c918b"
@@ -102,7 +102,9 @@ object ModelDownloader {
 
             val actualSha256 = sha256(temporary)
             check(actualSha256 == EXPECTED_SHA256) {
-                "Modellfilens kontrollsumma stämmer inte. Förväntad: $EXPECTED_SHA256. Fick: $actualSha256"
+                val type = connection.contentType ?: "okänd"
+                val bytes = temporary.length()
+                "Fel modellfil hämtades. SHA-256: $actualSha256. Storlek: $bytes byte. Innehållstyp: $type. Kontrollera nedladdningsadressen och serverns fil." 
             }
 
             if (destination.exists()) {
