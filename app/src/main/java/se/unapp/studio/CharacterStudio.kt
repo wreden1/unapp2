@@ -328,9 +328,12 @@ private fun CharacterConversation(character: UnAppCharacter, onBack: () -> Unit)
                                 ai.loadModel(model, characterInstruction(character))
                                 status = "AI loaded (" + ai.activeBackend + ")."
                             }
-                            // LiteRT-LM maintains the conversation history internally.
-                            // Send only the new turn to avoid duplicating the transcript.
-                            val answer = ai.ask(message)
+                            // Supply a bounded transcript from the locally saved chat.
+                            // The engine starts a clean model conversation for every turn.
+                            val recentHistory = updated.dropLast(1).takeLast(12).joinToString("\n") { line ->
+                                (if (line.fromUser) "User: " else character.name + ": ") + line.text
+                            }
+                            val answer = ai.ask(message, recentHistory)
                             lines = lines + CharacterLine(false, answer)
                             putChat(context, character.id, lines)
                             status = "Reply generated on this phone."
