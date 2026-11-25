@@ -54,8 +54,15 @@ class LocalAiEngine(context: Context) {
         maxOutputToken = 512
     )
 
-    suspend fun loadModel(modelFile: File, characterInstruction: String) {
+    suspend fun loadModel(
+        modelFile: File,
+        characterInstruction: String,
+        initialHistory: List<Pair<Boolean, String>> = emptyList()
+    ) {
         mutex.withLock {
+            val initialMessages = initialHistory.takeLast(12).map { (fromUser, text) ->
+                if (fromUser) Message.user(text) else Message.model(text)
+            }
             require(modelFile.isFile) {
                 "AI-modellen hittades inte: ${modelFile.absolutePath}"
             }
@@ -67,7 +74,7 @@ class LocalAiEngine(context: Context) {
                     if (systemInstruction != characterInstruction || conversation == null) {
                         systemInstruction = characterInstruction
                         conversation?.close()
-                        conversation = engine?.createConversation(conversationConfig())
+                        conversation = engine?.createConversation(conversationConfig(initialMessages = initialMessages))
                     }
                 }
                 return@withLock
@@ -87,7 +94,7 @@ class LocalAiEngine(context: Context) {
                     )
                     try {
                         gpuEngine.initialize()
-                        val gpuConversation = gpuEngine.createConversation(conversationConfig())
+                        val gpuConversation = gpuEngine.createConversation(conversationConfig(initialMessages = initialMessages))
                         engine = gpuEngine
                         conversation = gpuConversation
                         selectedBackend = "GPU"
@@ -109,7 +116,7 @@ class LocalAiEngine(context: Context) {
                 )
                 try {
                     cpuEngine.initialize()
-                    val cpuConversation = cpuEngine.createConversation(conversationConfig())
+                    val cpuConversation = cpuEngine.createConversation(conversationConfig(initialMessages = initialMessages))
                     engine = cpuEngine
                     conversation = cpuConversation
                     selectedBackend = "CPU (GPU stöds inte här)"
