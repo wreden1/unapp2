@@ -23,6 +23,16 @@ class LocalAiEngine(context: Context) {
     /**
      * Loads a downloaded .litertlm model from local storage.
      */
+    @Volatile
+    private var selectedBackend: String = "Not loaded"
+
+    val activeBackend: String
+        get() = selectedBackend
+
+    /**
+     * Tries GPU acceleration first. If the device's GPU runtime or driver
+     * cannot initialize this model, safely falls back to CPU.
+     */
     suspend fun loadModel(modelFile: File) {
         mutex.withLock {
             require(modelFile.isFile) {
@@ -32,7 +42,32 @@ class LocalAiEngine(context: Context) {
             if (conversation != null) return@withLock
 
             withContext(Dispatchers.IO) {
-                val newEngine = Engine(
+                var gpuError: Throwable? = null
+
+                try {
+                    val gpuEngine = Engine(
+                        EngineConfig(
+                            modelPath = modelFile.absolutePath,
+                            backend = Backend.GPU(),
+                            cacheDir = appContext.cacheDir.absolutePath
+                        )
+                    )
+                    try {
+                        gpuEngine.initialize()
+                        val gpuConversation = gpuEngine.createConversation()
+                        engine = gpuEngine
+                        conversation = gpuConversation
+                        selectedBackend = "GPU"
+                        return@withContext
+                    } catch (error: Throwable) {
+                        gpuEngine.close()
+                        throw error
+                    }
+                } catch (error: Throwable) {
+                    gpuError = error
+                }
+
+                val cpuEngine = Engine(
                     EngineConfig(
                         modelPath = modelFile.absolutePath,
                         backend = Backend.CPU(),
@@ -41,17 +76,15 @@ class LocalAiEngine(context: Context) {
                 )
 
                 try {
-                    newEngine.initialize()
-
-                    val newConversation =
-                        newEngine.createConversation()
-
-                    engine = newEngine
-                    conversation = newConversation
-
-                } catch (error: Throwable) {
-                    newEngine.close()
-                    throw error
+                    cpuEngine.initialize()
+                    val cpuConversation = cpuEngine.createConversation()
+                    engine = cpuEngine
+                    conversation = cpuConversation
+                    selectedBackend = "CPU (GPU stöds inte här)"
+                } catch (cpuError: Throwable) {
+                    cpuEngine.close()
+                    cpuError.addSuppressed(gpuError)
+                    throw cpuError
                 }
             }
         }
@@ -91,6 +124,7 @@ class LocalAiEngine(context: Context) {
 
                 engine?.close()
                 engine = null
+                selectedBackend = "Not loaded"
             }
         }
     }
