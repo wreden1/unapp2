@@ -71,9 +71,11 @@ fun UnAppScreen() {
 
     var prompt by remember { mutableStateOf("") }
     var result by remember { mutableStateOf("") }
+    var showAppForge by remember { mutableStateOf(false) }
     var savedProjects by remember {
         mutableStateOf(loadProjects(context))
     }
+    val localAiEngine = remember { LocalAiEngine(context) }
 
     MaterialTheme(
         colorScheme = darkColorScheme(
@@ -84,6 +86,21 @@ fun UnAppScreen() {
             onSurface = Color.White
         )
     ) {
+        if (showAppForge) {
+            AppForgeScreen(
+                onBack = { showAppForge = false },
+                onGenerate = { request ->
+                    val modelFile = ModelDownloader.modelFile(context)
+                    check(modelFile.isFile) {
+                        "Den lokala AI-modellen saknas. Installera modellfilen på telefonen först."
+                    }
+                    if (!localAiEngine.isLoaded()) {
+                        localAiEngine.loadModel(modelFile)
+                    }
+                    localAiEngine.ask(request)
+                }
+            )
+        } else {
         Scaffold(containerColor = Ink) { padding ->
             LazyColumn(
                 modifier = Modifier
@@ -118,6 +135,14 @@ fun UnAppScreen() {
                         color = Muted,
                         fontSize = 14.sp
                     )
+                    Spacer(Modifier.height(12.dp))
+                    Button(
+                        onClick = { showAppForge = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        Text("Öppna AppForge AI – egna regler och appbygge")
+                    }
                 }
 
                 item {
@@ -317,6 +342,7 @@ fun UnAppScreen() {
                     Spacer(Modifier.height(28.dp))
                 }
             }
+        }
         }
     }
 }
