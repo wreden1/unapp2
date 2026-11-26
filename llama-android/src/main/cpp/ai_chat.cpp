@@ -500,7 +500,9 @@ Java_com_arm_aichat_internal_InferenceEngineImpl_processUserPrompt(
 
     // Update position
     current_position += user_prompt_size;
-    stop_generation_position = current_position + user_prompt_size + n_predict;
+    // The prompt tokens are already included in current_position. Add only the
+    // requested generation budget, otherwise replies can run longer than intended.
+    stop_generation_position = current_position + n_predict;
     return 0;
 }
 
@@ -550,9 +552,13 @@ Java_com_arm_aichat_internal_InferenceEngineImpl_generateNextToken(
         shift_context();
     }
 
-    // Stop if reaching the marked position
+    // Stop if reaching the marked position. The generated assistant text must
+    // be committed to chat_msgs even when the token budget ends the turn rather
+    // than an end-of-generation token; otherwise the next turn sees a broken
+    // user/assistant history and can fall into repetitive responses.
     if (current_position >= stop_generation_position) {
         LOGw("%s: STOP: hitting stop position: %d", __func__, stop_generation_position);
+        chat_add_and_format(ROLE_ASSISTANT, assistant_ss.str());
         return nullptr;
     }
 
