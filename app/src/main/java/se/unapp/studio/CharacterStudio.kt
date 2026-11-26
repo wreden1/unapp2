@@ -229,6 +229,7 @@ private fun CharacterConversation(character: UnAppCharacter, onBack: () -> Unit)
     var status by remember { mutableStateOf("Chat history is stored locally.") }
     var busy by remember { mutableStateOf(false) }
     var progress by remember { mutableIntStateOf(0) }
+    var showImageTools by remember { mutableStateOf(false) }
     val imageModel = remember { OfflineImageModelDownloader.modelFile(context) }
     val imageEngine = remember { OfflineImageEngine() }
     var imageReady by remember { mutableStateOf(false) }
@@ -289,7 +290,10 @@ private fun CharacterConversation(character: UnAppCharacter, onBack: () -> Unit)
             }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Load offline AI model") }
         }
         Text(status, color = CSMuted, fontSize = 10.sp)
-        CSCard {
+        TextButton(onClick = { showImageTools = !showImageTools }) {
+            Text(if (showImageTools) "Dölj bildgenerator" else "Visa bildgenerator", color = CSAccent)
+        }
+        if (showImageTools) CSCard {
             Text("Offline bildgenerator", color = Color.White, fontWeight = FontWeight.Bold)
             Text(
                 if (imageModel.isFile) "Bildmodellen finns på telefonen." else "Bildmodellen är ${OfflineImageModelDownloader.MODEL_SIZE_LABEL}. Ladda ner en gång med internet. Därefter fungerar bildskapandet offline.",
@@ -348,14 +352,11 @@ private fun CharacterConversation(character: UnAppCharacter, onBack: () -> Unit)
             }
             items(lines) { line ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = if (line.fromUser) Arrangement.End else Arrangement.Start) {
-                    Column(
-                        Modifier.widthIn(max = 290.dp)
-                            .background(if (line.fromUser) Color(0xFF39305F) else CSPanel, RoundedCornerShape(14.dp))
-                            .padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        if (line.text.isNotBlank()) Text(line.text, color = Color.White, fontSize = 14.sp)
-                        if (line.imagePath != null) GeneratedChatImage(line.imagePath)
+                    Box(Modifier.widthIn(max = 290.dp).background(if (line.fromUser) Color(0xFF39305F) else CSPanel, RoundedCornerShape(14.dp)).padding(12.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            if (line.text.isNotBlank()) Text(line.text, color = Color.White, fontSize = 14.sp)
+                            if (line.imagePath != null) GeneratedChatImage(line.imagePath)
+                        }
                     }
                 }
             }
