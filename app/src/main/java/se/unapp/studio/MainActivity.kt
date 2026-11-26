@@ -74,6 +74,7 @@ fun UnAppScreen() {
     var prompt by remember { mutableStateOf("") }
     var result by remember { mutableStateOf("") }
     var showAppForge by remember { mutableStateOf(false) }
+    var showCharacterStudio by remember { mutableStateOf(false) }
     var isChatGenerating by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     var savedProjects by remember {
@@ -101,7 +102,7 @@ fun UnAppScreen() {
                     }
                     if (!localAiEngine.isLoaded()) {
                         reportStatus("Startar den lokala AI-motorn...")
-                        localAiEngine.loadModel(modelFile)
+                        localAiEngine.loadModel(modelFile, "Du är AppForge AI. Hjälp användaren att planera Android-appar. Svara alltid på svenska. Hitta inte på att en APK redan är byggd.", emptyList())
                     }
                     reportStatus("AI:n är ansluten. Skapar din appspecifikation...")
                     localAiEngine.ask(request)
@@ -149,6 +150,13 @@ fun UnAppScreen() {
                         shape = RoundedCornerShape(14.dp)
                     ) {
                         Text("Öppna AppForge AI – egna regler och appbygge")
+                    }
+                    OutlinedButton(
+                        onClick = { showCharacterStudio = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        Text("Öppna chatt – Character Studio")
                     }
                 }
 
@@ -206,11 +214,11 @@ fun UnAppScreen() {
                                         var modelFile = ModelDownloader.modelFile(context)
                                         if (!modelFile.isFile) {
                                             result = "Laddar ner AI-modellen första gången. Anslut till Wi-Fi och vänta..."
-                                            modelFile = ModelDownloader.download(context)
+                                            modelFile = ModelDownloader.download(context) { percent -> result = "Laddar ner AI-modellen: $percent%" }
                                         }
                                         if (!localAiEngine.isLoaded()) {
                                             result = "Startar den lokala AI-motorn..."
-                                            localAiEngine.loadModel(modelFile)
+                                            localAiEngine.loadModel(modelFile, "Du är UnApp, en hjälpsam lokal AI som hjälper användaren att planera Android-appar. Svara på svenska.", emptyList())
                                         }
                                         result = localAiEngine.ask(
                                             "Du är UnApp, en hjälpsam lokal AI som hjälper användaren att planera Android-appar. Svara på svenska. Användarens appidé: $idea"
@@ -369,6 +377,14 @@ fun UnAppScreen() {
                 }
             }
         }
+        }
+        if (showCharacterStudio) {
+            Dialog(
+                onDismissRequest = { showCharacterStudio = false },
+                properties = DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                CharacterStudioScreen(onClose = { showCharacterStudio = false })
+            }
         }
     }
 }
