@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -73,6 +74,8 @@ fun UnAppScreen() {
     var prompt by remember { mutableStateOf("") }
     var result by remember { mutableStateOf("") }
     var showAppForge by remember { mutableStateOf(false) }
+    var isChatGenerating by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     var savedProjects by remember {
         mutableStateOf(loadProjects(context))
     }
@@ -196,13 +199,32 @@ fun UnAppScreen() {
                         Button(
                             onClick = {
                                 val idea = prompt.trim()
-                                val updated = savedProjects + idea
-
-                                savedProjects = updated
-                                saveProjects(context, updated)
-
-                                result = "APP-IDÉ SPARAD!\n\n$idea\n\nDu hittar den nu under Mina appar."
-                                prompt = ""
+                                isChatGenerating = true
+                                result = "Förbereder den lokala AI:n..."
+                                scope.launch {
+                                    try {
+                                        var modelFile = ModelDownloader.modelFile(context)
+                                        if (!modelFile.isFile) {
+                                            result = "Laddar ner AI-modellen första gången. Anslut till Wi-Fi och vänta..."
+                                            modelFile = ModelDownloader.download(context)
+                                        }
+                                        if (!localAiEngine.isLoaded()) {
+                                            result = "Startar den lokala AI-motorn..."
+                                            localAiEngine.loadModel(modelFile)
+                                        }
+                                        result = localAiEngine.ask(
+                                            "Du är UnApp, en hjälpsam lokal AI som hjälper användaren att planera Android-appar. Svara på svenska. Användarens appidé: $idea"
+                                        )
+                                        val updated = savedProjects + idea
+                                        savedProjects = updated
+                                        saveProjects(context, updated)
+                                        prompt = ""
+                                    } catch (error: Throwable) {
+                                        result = "AI-fel: \${error.message ?: "Okänt fel"}"
+                                    } finally {
+                                        isChatGenerating = false
+                                    }
+                                }
                             },
                             enabled = prompt.isNotBlank(),
                             modifier = Modifier
@@ -211,7 +233,7 @@ fun UnAppScreen() {
                             shape = RoundedCornerShape(15.dp)
                         ) {
                             Text(
-                                "Skapa app med AI",
+                                if (isChatGenerating) "AI arbetar..." else "Skapa app med AI",
                                 fontWeight = FontWeight.Bold
                             )
                         }
