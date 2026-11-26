@@ -1,110 +1,102 @@
 package se.unapp.studio
 
 import android.content.Context
-import com.google.ai.edge.litertlm.Backend
-import com.google.ai.edge.litertlm.Conversation
-import com.google.ai.edge.litertlm.Engine
-import com.google.ai.edge.litertlm.EngineConfig
-import java.io.File
-import kotlinx.coroutines.Dispatchers
+import com.arm.aichat.AiChat
+import com.arm.aichat.InferenceEngine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
+import java.io.File
 
+/**
+ * Offline inference adapter. The native llama.cpp engine is shared by the
+ * Android binding; each character chat reloads its own system prompt/history.
+ */
 class LocalAiEngine(context: Context) {
 
-    private val appContext = context.applicationContext
+    private val inference: InferenceEngine = AiChat.getInferenceEngine(context.applicationContext)
     private val mutex = Mutex()
 
-    private var engine: Engine? = null
-    private var conversation: Conversation? = null
+    @Volatile
+    private var loaded = false
 
-    /**
-     * Loads a downloaded .litertlm model from local storage.
-     */
-    suspend fun loadModel(modelFile: File) {
+    val activeBackend: String
+        get() = "llama.cpp (ARM CPU acceleration when available)"
+
+    suspend fun loadModel(
+        modelFile: File,
+        characterInstruction: String,
+        initialHistory: List<Pair<Boolean, String>> = emptyList()
+    ) {
         mutex.withLock {
             require(modelFile.isFile) {
                 "AI-modellen hittades inte: ${modelFile.absolutePath}"
             }
 
-            if (conversation != null) return@withLock
-
-            withContext(Dispatchers.IO) {
-                val newEngine = Engine(
-                    EngineConfig(
-                        modelPath = modelFile.absolutePath,
-                        backend = Backend.CPU(),
-                        cacheDir = appContext.cacheDir.absolutePath
-                    )
-                )
-
-                try {
-                    newEngine.initialize()
-
-                    val newConversation =
-                        newEngine.createConversation()
-
-                    engine = newEngine
-                    conversation = newConversation
-
-                } catch (error: Throwable) {
-                    newEngine.close()
-                    throw error
-                }
+            val readyState = inference.state.first {
+                it is InferenceEngine.State.Initialized || it is InferenceEngine.State.Error
             }
+            if (readyState is InferenceEngine.State.Error) {
+                throw readyState.exception
+            }
+
+            when (inference.state.value) {
+                is InferenceEngine.State.ModelReady -> inference.cleanUp()
+                is InferenceEngine.State.Error -> inference.cleanUp()
+                else -> Unit
+            }
+
+            inference.loadModel(modelFile.absolutePath)
+            inference.setSystemPrompt(characterInstruction)
+            inference.setConversationHistory(initialHistory.takeLast(12))
+            loaded = true
         }
     }
 
-    /**
-     * Sends a prompt to the local AI and returns its answer.
-     */
-    suspend fun ask(prompt: String): String {
-        require(prompt.isNotBlank()) {
-            "Skriv en fråga först."
-        }
+    suspend fun ask(
+        prompt: String,
+        recentHistory: List<Pair<Boolean, String>> = emptyList()
+    ): String {
+        require(prompt.isNotBlank()) { "Skriv en fråga först." }
 
         return mutex.withLock {
-            val activeConversation =
-                checkNotNull(conversation) {
-                    "AI-modellen är inte laddad ännu."
-                }
+            check(loaded && inference.state.value is InferenceEngine.State.ModelReady) {
+                "AI-modellen är inte laddad ännu."
+            }
 
-            withContext(Dispatchers.IO) {
-                val result = StringBuilder()
+            val response = StringBuilder()
+            // Qwen3 defaults to a visible reasoning phase. The /no_think switch
+            // asks the model to produce the character's reply directly, leaving
+            // more of the token budget for the actual conversation.
+            inference.sendUserPrompt("$prompt\n/no_think", predictLength = 1536).collect { token ->
+                response.append(token)
+            }
 
-                activeConversation
-                    .sendMessageAsync(prompt)
-                    .collect { message ->
-                        val text = message.toString()
+            // Safety net for checkpoints/templates that still emit Qwen-style
+            // reasoning markers. Never show an unfinished reasoning block as
+            // the character's message.
+            val visibleReply = response.toString()
+                .replace(Regex("(?s)<think>.*?</think>"), "")
+                .substringBefore("<think>")
+                .replace("</think>", "")
+                .trim()
 
-                        if (text.isNotEmpty()) {
-                            result.append(text)
-                        }
-                    }
-
-                result.toString().trim()
+            visibleReply.ifBlank {
+                "Jag fick inget tydligt svar den här gången. Försök igen."
             }
         }
     }
 
-    /**
-     * Releases the model and conversation resources.
-     */
     suspend fun close() {
         mutex.withLock {
-            withContext(Dispatchers.IO) {
-                conversation?.close()
-                conversation = null
-
-                engine?.close()
-                engine = null
+            if (loaded && inference.state.value is InferenceEngine.State.ModelReady) {
+                inference.cleanUp()
             }
+            loaded = false
         }
     }
 
-    fun isLoaded(): Boolean {
-        return engine != null && conversation != null
-    }
+    fun isLoaded(): Boolean =
+        loaded && inference.state.value is InferenceEngine.State.ModelReady
 }
