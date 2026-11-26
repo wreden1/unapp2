@@ -462,6 +462,10 @@ Java_com_arm_aichat_internal_InferenceEngineImpl_processUserPrompt(
         jstring juser_prompt,
         jint n_predict
 ) {
+    // Start each reply with a fresh sampling history. Keep the conversation/KV
+    // context intact; only clear tokens accepted by the sampler in prior turns.
+    common_sampler_reset(g_sampler);
+
     // Reset short-term states
     reset_short_term_states();
 
