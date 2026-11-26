@@ -66,7 +66,7 @@ class LocalAiEngine(context: Context) {
             // Qwen3 defaults to a visible reasoning phase. The /no_think switch
             // asks the model to produce the character's reply directly, leaving
             // more of the response budget for the actual conversation.
-            inference.sendUserPrompt("$prompt\\n/no_think", predictLength = 1536).collect { token ->
+            inference.sendUserPrompt("$prompt\n/no_think", predictLength = 1536).collect { token ->
                 response.append(token)
             }
 
