@@ -64,7 +64,7 @@ private fun saveForgeProjects(context: Context, projects: List<ForgeProject>) {
 @Composable
 fun AppForgeScreen(
     onBack: () -> Unit,
-    onGenerate: suspend (String) -> String
+    onGenerate: suspend (String, (String) -> Unit) -> String
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -142,7 +142,7 @@ fun AppForgeScreen(
                         }
                         scope.launch {
                             try {
-                                blueprint = onGenerate(request)
+                                blueprint = onGenerate(request) { message -> status = message }
                                 status = if (blueprint.isBlank()) "AI:n gav inget resultat. Försök igen." else "Appspecifikationen är skapad."
                             } catch (error: Throwable) {
                                 status = error.message ?: "Det gick inte att skapa appspecifikationen."
