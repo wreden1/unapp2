@@ -64,7 +64,6 @@ class LocalAiEngine(context: Context) {
         recentHistory: List<Pair<Boolean, String>>
     ): String {
         val earlierReplies = recentHistory
-            .asSequence()
             .filter { !it.first && it.second.isNotBlank() }
             .takeLast(4)
             .map { (_, reply) ->
