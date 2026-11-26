@@ -66,10 +66,23 @@ class LocalAiEngine(context: Context) {
             }
 
             val response = StringBuilder()
-            inference.sendUserPrompt(prompt, predictLength = 1536).collect { token ->
+            // Qwen3 defaults to a visible reasoning phase. The /no_think switch
+            // asks the model to produce the character's reply directly, leaving
+            // more of the token budget for the actual conversation.
+            inference.sendUserPrompt("$prompt\n/no_think", predictLength = 1536).collect { token ->
                 response.append(token)
             }
-            response.toString().trim().ifBlank {
+
+            // Safety net for checkpoints/templates that still emit Qwen-style
+            // reasoning markers. Never show an unfinished reasoning block as
+            // the character's message.
+            val visibleReply = response.toString()
+                .replace(Regex("(?s)<think>.*?</think>"), "")
+                .substringBefore("<think>")
+                .replace("</think>", "")
+                .trim()
+
+            visibleReply.ifBlank {
                 "Jag fick inget tydligt svar den här gången. Försök igen."
             }
         }
