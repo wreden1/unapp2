@@ -25,6 +25,9 @@ interface InferenceEngine {
      */
     suspend fun setSystemPrompt(systemPrompt: String)
 
+    /** Restore previous turns without generating replacement replies. */
+    suspend fun setConversationHistory(history: List<Pair<Boolean, String>>)
+
     /**
      * Sends a user prompt to the loaded model and returns a Flow of generated tokens.
      */
