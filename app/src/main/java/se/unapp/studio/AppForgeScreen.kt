@@ -17,6 +17,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.json.JSONArray
 import org.json.JSONObject
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 
 private val ForgePanel = Color(0xFF151D32)
 private val ForgeAccent = Color(0xFF8B7CFF)
@@ -81,6 +83,7 @@ fun AppForgeScreen(
     var status by remember { mutableStateOf("") }
     var blueprint by remember { mutableStateOf("") }
     var projects by remember { mutableStateOf(loadForgeProjects(context)) }
+    var previewProject by remember { mutableStateOf<ForgeProject?>(null) }
 
     MaterialTheme(colorScheme = darkColorScheme(
         background = Color(0xFF0B1020),
@@ -171,6 +174,17 @@ fun AppForgeScreen(
                             saveForgeProjects(context, saved)
                             status = "Appspecifikationen har sparats lokalt."
                         }, modifier = Modifier.fillMaxWidth()) { Text("Spara projekt lokalt") }
+                        Button(
+                            onClick = {
+                                previewProject = ForgeProject(appName.ifBlank { "Min app" }, description, blueprint)
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Öppna förhandsvisning") }
+                        OutlinedButton(
+                            onClick = { status = "APK-byggaren är nästa steg. Projektet är sparat, men en separat installationsfil kan ännu inte skapas." },
+                            enabled = false,
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Bygg APK – kommer i nästa steg") }
                     }
                 }
 
@@ -182,15 +196,64 @@ fun AppForgeScreen(
                         Column(Modifier.fillMaxWidth().background(ForgePanel, RoundedCornerShape(14.dp)).padding(13.dp)) {
                             Text(project.name, color = Color.White, fontWeight = FontWeight.SemiBold)
                             Text(project.description, color = ForgeMuted, fontSize = 12.sp, maxLines = 3)
-                            TextButton(onClick = {
-                                projects = projects.filterIndexed { i, _ -> i != index }
-                                saveForgeProjects(context, projects)
-                            }) { Text("Ta bort projekt") }
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(onClick = { previewProject = project }, modifier = Modifier.weight(1f)) {
+                                    Text("Öppna appen")
+                                }
+                                TextButton(onClick = {
+                                    projects = projects.filterIndexed { i, _ -> i != index }
+                                    saveForgeProjects(context, projects)
+                                }) { Text("Ta bort") }
+                            }
                         }
                     }
                 }
                 Spacer(Modifier.height(24.dp))
             }
+        }
+        previewProject?.let { project ->
+            ForgePreviewDialog(project = project, onDismiss = { previewProject = null })
+        }
+    }
+}
+
+@Composable
+private fun ForgePreviewDialog(project: ForgeProject, onDismiss: () -> Unit) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Column(
+            Modifier.fillMaxSize()
+                .padding(16.dp)
+                .background(Color(0xFF0B1020), RoundedCornerShape(24.dp))
+                .padding(20.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("APPFÖRHANDSVISNING", color = ForgeAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                TextButton(onClick = onDismiss) { Text("Stäng") }
+            }
+            Column(
+                Modifier.fillMaxWidth()
+                    .background(ForgePanel, RoundedCornerShape(20.dp))
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(project.name, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                Text(project.description, color = ForgeMuted, fontSize = 14.sp, lineHeight = 21.sp)
+                Divider(color = ForgeMuted.copy(alpha = 0.25f))
+                Text("APPENS FUNKTIONER OCH SKÄRMAR", color = ForgeAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text(project.blueprint, color = Color.White, fontSize = 13.sp, lineHeight = 19.sp)
+            }
+            Text(
+                "Det här är en visuell förhandsvisning av AI:ns appplan – inte en färdig, körbar app ännu. Dina andra UnApp-funktioner påverkas inte.",
+                color = ForgeMuted,
+                fontSize = 12.sp,
+                lineHeight = 18.sp
+            )
+            Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Tillbaka till AppForge") }
         }
     }
 }
