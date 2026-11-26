@@ -233,6 +233,7 @@ private fun CharacterConversation(character: UnAppCharacter, onBack: () -> Unit)
     val imageEngine = remember { OfflineImageEngine() }
     var imageReady by remember { mutableStateOf(false) }
     var imageBusy by remember { mutableStateOf(false) }
+    var imageGenerating by remember { mutableStateOf(false) }
     var imageProgress by remember { mutableIntStateOf(0) }
     var imageStatus by remember { mutableStateOf("Bildgeneratorn är separat från chattens AI.") }
     DisposableEffect(imageEngine) {
@@ -369,6 +370,26 @@ private fun CharacterConversation(character: UnAppCharacter, onBack: () -> Unit)
                     }
                 }
             }
+            if (imageGenerating) {
+                item(key = "image_generation_indicator") {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+                        Column(
+                            Modifier.widthIn(max = 290.dp)
+                                .background(CSPanel, RoundedCornerShape(14.dp))
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("🧑‍🎨", fontSize = 22.sp)
+                                Spacer(Modifier.width(9.dp))
+                                Text("Skapar din bild" + typingDots, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                            Text("Bilden visas här automatiskt när den är klar. Det kan ta en stund på telefonen.", color = CSMuted, fontSize = 11.sp)
+                        }
+                    }
+                }
+            }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             BasicTextField(
@@ -383,6 +404,7 @@ private fun CharacterConversation(character: UnAppCharacter, onBack: () -> Unit)
                     val description = draft.trim()
                     if (description.isNotBlank() && imageReady && !imageBusy) {
                         imageBusy = true
+                        imageGenerating = true
                         imageStatus = "Skapar bild lokalt på telefonen. Det kan ta en stund..."
                         draft = ""
                         scope.launch {
@@ -405,7 +427,7 @@ private fun CharacterConversation(character: UnAppCharacter, onBack: () -> Unit)
                                 imageStatus = "Bilden är skapad och sparad lokalt."
                             } catch (e: Exception) {
                                 imageStatus = e.message ?: "Bildgenereringen misslyckades."
-                            } finally { imageBusy = false }
+                            } finally { imageGenerating = false; imageBusy = false }
                         }
                     }
                 },
