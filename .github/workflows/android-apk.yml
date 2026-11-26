@@ -5,6 +5,14 @@ on:
   push:
     branches:
       - main
+      - feature/character-studio
+      - feature/llama-cpp-engine
+      - feature/offline-image-generation
+  pull_request:
+    branches:
+      - main
+      - feature/character-studio
+      - fix/expand-chat-history
 
 jobs:
   build:
@@ -12,6 +20,16 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Check out stable-diffusion.cpp
+        uses: actions/checkout@v4
+        with:
+          repository: leejet/stable-diffusion.cpp
+          ref: e637c7bccd35aa8841d67fb942ba72918176826c
+          path: app/src/main/cpp/third_party/stable-diffusion.cpp
+          submodules: recursive
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -30,7 +48,7 @@ jobs:
           packages: 'platform-tools'
 
       - name: Install Android 36 SDK
-        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;29.0.13113456" "cmake;3.31.6"
 
       - name: Build debug APK
         run: gradle --no-daemon assembleDebug
