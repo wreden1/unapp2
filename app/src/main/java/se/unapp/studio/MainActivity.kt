@@ -74,6 +74,8 @@ fun UnAppScreen() {
     var prompt by remember { mutableStateOf("") }
     var result by remember { mutableStateOf("") }
     var showCharacterStudio by remember { mutableStateOf(false) }
+    var showAppForge by remember { mutableStateOf(false) }
+    val appForgeAi = remember { LocalAiEngine(context) }
     var savedProjects by remember {
         mutableStateOf(loadProjects(context))
     }
@@ -195,6 +197,13 @@ fun UnAppScreen() {
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text("Character Studio")
+                        }
+
+                        OutlinedButton(
+                            onClick = { showAppForge = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("AppForge AI")
                         }
 
                         if (result.isNotEmpty()) {
@@ -334,6 +343,35 @@ fun UnAppScreen() {
                 properties = DialogProperties(usePlatformDefaultWidth = false)
             ) {
                 CharacterStudioScreen(onClose = { showCharacterStudio = false })
+            }
+        }
+        if (showAppForge) {
+            Dialog(
+                onDismissRequest = { showAppForge = false },
+                properties = DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                AppForgeScreen(
+                    onBack = { showAppForge = false },
+                    onGenerate = { request, reportStatus ->
+                        var modelFile = ModelDownloader.modelFile(context)
+                        if (!modelFile.isFile) {
+                            reportStatus("Laddar ner den lokala AI-modellen första gången...")
+                            modelFile = ModelDownloader.download(context) { percent ->
+                                reportStatus("Laddar ner AI-modellen: $percent%")
+                            }
+                        }
+                        if (!appForgeAi.isLoaded()) {
+                            reportStatus("Startar den lokala AI-motorn...")
+                            appForgeAi.loadModel(
+                                modelFile,
+                                "Du är AppForge AI. Hjälp användaren att planera Android-appar. Svara alltid på svenska. Var tydlig och hitta inte på att en APK redan är byggd.",
+                                emptyList()
+                            )
+                        }
+                        reportStatus("AI:n är ansluten. Skapar appspecifikationen...")
+                        appForgeAi.ask(request)
+                    }
+                )
             }
         }
     }
