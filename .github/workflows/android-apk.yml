@@ -7,10 +7,12 @@ on:
       - main
       - feature/character-studio
       - feature/llama-cpp-engine
+      - feature/offline-image-generation
   pull_request:
     branches:
       - main
       - feature/character-studio
+      - fix/expand-chat-history
 
 jobs:
   build:
@@ -19,6 +21,14 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
         with:
+          submodules: recursive
+
+      - name: Check out stable-diffusion.cpp
+        uses: actions/checkout@v4
+        with:
+          repository: leejet/stable-diffusion.cpp
+          ref: e637c7bccd35aa8841d67fb942ba72918176826c
+          path: app/src/main/cpp/third_party/stable-diffusion.cpp
           submodules: recursive
 
       - name: Set up Java
