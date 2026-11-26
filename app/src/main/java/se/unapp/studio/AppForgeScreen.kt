@@ -17,8 +17,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.json.JSONArray
 import org.json.JSONObject
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 
 private val ForgePanel = Color(0xFF151D32)
 private val ForgeAccent = Color(0xFF8B7CFF)
@@ -219,43 +217,45 @@ fun AppForgeScreen(
 
 @Composable
 private fun ForgePreviewDialog(project: ForgeProject, onDismiss: () -> Unit) {
-    Dialog(
+    AlertDialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Column(
-            Modifier.fillMaxSize()
-                .padding(16.dp)
-                .background(Color(0xFF0B1020), RoundedCornerShape(24.dp))
-                .padding(20.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("APPFÖRHANDSVISNING", color = ForgeAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                TextButton(onClick = onDismiss) { Text("Stäng") }
-            }
+        title = {
+            Text(
+                "APPFÖRHANDSVISNING",
+                color = ForgeAccent,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
             Column(
-                Modifier.fillMaxWidth()
-                    .background(ForgePanel, RoundedCornerShape(20.dp))
-                    .padding(20.dp),
+                Modifier.fillMaxWidth().heightIn(max = 480.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(project.name, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                Text(project.name, color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.Bold)
                 Text(project.description, color = ForgeMuted, fontSize = 14.sp, lineHeight = 21.sp)
                 Divider(color = ForgeMuted.copy(alpha = 0.25f))
-                Text("APPENS FUNKTIONER OCH SKÄRMAR", color = ForgeAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    "APPENS FUNKTIONER OCH SKÄRMAR",
+                    color = ForgeAccent,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
                 Text(project.blueprint, color = Color.White, fontSize = 13.sp, lineHeight = 19.sp)
+                Text(
+                    "Det här är en visuell förhandsvisning av AI:ns appplan – inte en färdig, körbar app ännu. Dina andra UnApp-funktioner påverkas inte.",
+                    color = ForgeMuted,
+                    fontSize = 12.sp,
+                    lineHeight = 18.sp
+                )
             }
-            Text(
-                "Det här är en visuell förhandsvisning av AI:ns appplan – inte en färdig, körbar app ännu. Dina andra UnApp-funktioner påverkas inte.",
-                color = ForgeMuted,
-                fontSize = 12.sp,
-                lineHeight = 18.sp
-            )
-            Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Tillbaka till AppForge") }
-        }
-    }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Stäng") }
+        },
+        containerColor = Color(0xFF151D32),
+        titleContentColor = Color.White,
+        textContentColor = Color.White
+    )
 }
 
 @Composable
