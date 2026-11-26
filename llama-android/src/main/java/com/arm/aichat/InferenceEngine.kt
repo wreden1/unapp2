@@ -89,4 +89,4 @@ val State.isModelLoaded: Boolean
         this is State.ProcessingUserPrompt ||
         this is State.Generating
 
-class UnsupportedArchitectureException : Exception()
+class UnsupportedArchitectureException(message: String = "Modellens arkitektur stöds inte.") : Exception(message)
