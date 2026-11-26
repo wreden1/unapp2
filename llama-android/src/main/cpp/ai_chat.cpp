@@ -38,12 +38,24 @@ static llama_context                    * g_context;
 static common_batch                       g_batch;
 static common_chat_templates_ptr          g_chat_templates;
 static common_sampler                   * g_sampler;
+static std::string g_last_native_error;
+
+static void aichat_capture_log_callback(enum ggml_log_level level,
+                                        const char * text,
+                                        void * /*user*/) {
+    const int prio = android_log_prio_from_ggml(level);
+    if (level == GGML_LOG_LEVEL_ERROR && text != nullptr) {
+        if (!g_last_native_error.empty()) g_last_native_error += "\\n";
+        g_last_native_error += text;
+    }
+    if (ai_should_log(prio)) __android_log_write(prio, LOG_TAG, text);
+}
 
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_arm_aichat_internal_InferenceEngineImpl_init(JNIEnv *env, jobject /*unused*/, jstring nativeLibDir) {
     // Set llama log handler to Android
-    llama_log_set(aichat_android_log_callback, nullptr);
+    llama_log_set(aichat_capture_log_callback, nullptr);
 
     // Loading all CPU backend variants
     const auto *path_to_backend = env->GetStringUTFChars(nativeLibDir, 0);
@@ -59,6 +71,7 @@ Java_com_arm_aichat_internal_InferenceEngineImpl_init(JNIEnv *env, jobject /*unu
 extern "C"
 JNIEXPORT jint JNICALL
 Java_com_arm_aichat_internal_InferenceEngineImpl_load(JNIEnv *env, jobject, jstring jmodel_path) {
+    g_last_native_error.clear();
     llama_model_params model_params = llama_model_default_params();
 
     const auto *model_path = env->GetStringUTFChars(jmodel_path, 0);
@@ -71,6 +84,12 @@ Java_com_arm_aichat_internal_InferenceEngineImpl_load(JNIEnv *env, jobject, jstr
     }
     g_model = model;
     return 0;
+}
+
+extern "C"
+JNIEXPORT jstring JNICALL
+Java_com_arm_aichat_internal_InferenceEngineImpl_lastNativeError(JNIEnv *env, jobject /*unused*/) {
+    return env->NewStringUTF(g_last_native_error.c_str());
 }
 
 static llama_context *init_context(llama_model *model, const int n_ctx = DEFAULT_CONTEXT_SIZE) {
