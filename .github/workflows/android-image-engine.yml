@@ -1,0 +1,60 @@
+name: Android image engine (CPU)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/android-image-engine.yml"
+      - "docs/offline-image-generation.md"
+
+jobs:
+  build-arm64:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out UnApp
+        uses: actions/checkout@v4
+
+      - name: Check out stable-diffusion.cpp
+        uses: actions/checkout@v4
+        with:
+          repository: leejet/stable-diffusion.cpp
+          ref: e637c7bccd35aa8841d67fb942ba72918176826c
+          path: third_party/stable-diffusion.cpp
+          submodules: recursive
+
+      - name: Install Android NDK and CMake
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools ndk;27.2.12479018 cmake;3.31.0
+
+      - name: Install Ninja
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+      - name: Configure arm64 CPU backend
+        run: |
+          cmake -S third_party/stable-diffusion.cpp -B build/image-engine \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/27.2.12479018/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-28 \
+            -DANDROID_STL=c++_shared \
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+            -DSD_BUILD_SHARED_LIBS=ON \
+            -DSD_BUILD_EXAMPLES=OFF \
+            -DSD_WEBP=OFF \
+            -DSD_WEBM=OFF \
+            -DSD_OPENCL=OFF \
+            -DSD_VULKAN=OFF \
+            -DGGML_OPENMP=OFF \
+            -DGGML_NATIVE=OFF
+
+      - name: Build native image engine
+        run: cmake --build build/image-engine --target stable-diffusion --parallel 2
+
+      - name: Upload native library
+        uses: actions/upload-artifact@v4
+        with:
+          name: stable-diffusion-android-arm64
+          path: build/image-engine/bin/libstable-diffusion.so
+          if-no-files-found: error
