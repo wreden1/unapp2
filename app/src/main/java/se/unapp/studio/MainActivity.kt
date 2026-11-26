@@ -220,7 +220,7 @@ fun UnAppScreen() {
                                         saveProjects(context, updated)
                                         prompt = ""
                                     } catch (error: Throwable) {
-                                        result = "AI-fel: \${error.message ?: "Okänt fel"}"
+                                        result = "AI-fel: ${error.message ?: "Okänt fel"}"
                                     } finally {
                                         isChatGenerating = false
                                     }
