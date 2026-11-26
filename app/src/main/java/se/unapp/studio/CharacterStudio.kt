@@ -272,7 +272,7 @@ private fun CharacterConversation(character: UnAppCharacter, onBack: () -> Unit)
                 busy = true
                 scope.launch {
                     try { ai.loadModel(model, characterInstruction(character), lines.takeLast(12).map { it.fromUser to it.text }); status = "Offline AI ready." }
-                    catch (e: Exception) { status = e.message ?: "Could not load AI." }
+                    catch (e: Exception) { status = e.message ?: e.javaClass.simpleName }
                     finally { busy = false }
                 }
             }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Load offline AI model") }
@@ -334,7 +334,7 @@ private fun CharacterConversation(character: UnAppCharacter, onBack: () -> Unit)
                             lines = completedTranscript
                             putChat(context, character.id, completedTranscript)
                             status = "Reply generated on this phone."
-                        } catch (e: Exception) { status = e.message ?: "AI reply failed." }
+                        } catch (e: Exception) { status = e.message ?: e.javaClass.simpleName }
                         finally { busy = false }
                     }
                 }
