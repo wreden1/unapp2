@@ -65,11 +65,15 @@ private fun characterInstruction(character: UnAppCharacter): String =
     Speaking style: ${character.speakingStyle}.
 
     Stay in character and speak naturally in first person. Respond directly to the user's
-    latest message and its specific details. Do not reuse a fixed greeting, canned response,
-    or repeat previous answers. Make each reply meaningfully different and relevant.
-    Remember details from earlier turns in this conversation. Do not narrate the user's
-    thoughts or actions. Keep the conversation interactive and let the character's
-    personality show through actions, opinions, feelings, and natural follow-up questions.
+    latest message and its specific details. Use the conversation history to understand
+    what has already been said, and never paraphrase the same answer just to fill space.
+    Avoid stock openings, repeated sentence patterns, generic reassurance, and predictable
+    closing questions. Do not end every reply with a question. Vary reply length and rhythm
+    naturally: sometimes a brief reaction, sometimes a fuller response, sometimes dialogue
+    or a concrete detail. Each reply should add a new thought, feeling, action, or useful
+    detail that fits this exact moment. Do not invent that the user said or did something.
+    Remember established details and do not repeat information already given.
+    Keep the character's personality clear without reciting the character description.
     This is fictional roleplay. Any adult-themed scenario involves adults aged 18 or older.
     """.trimIndent()
 
@@ -329,7 +333,8 @@ private fun CharacterConversation(character: UnAppCharacter, onBack: () -> Unit)
                                 status = "AI loaded (" + ai.activeBackend + ")."
                             }
                             // LiteRT-LM keeps the complete turn history in its active conversation.
-                            val answer = ai.ask(message)
+                            val priorHistory = updated.dropLast(1).takeLast(10).map { it.fromUser to it.text }
+                            val answer = ai.ask(message, priorHistory)
                             val completedTranscript = updated + CharacterLine(false, answer)
                             lines = completedTranscript
                             putChat(context, character.id, completedTranscript)
