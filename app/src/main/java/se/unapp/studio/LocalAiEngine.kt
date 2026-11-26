@@ -54,10 +54,7 @@ class LocalAiEngine(context: Context) {
         }
     }
 
-    suspend fun ask(
-        prompt: String,
-        recentHistory: List<Pair<Boolean, String>> = emptyList()
-    ): String {
+    suspend fun ask(prompt: String): String {
         require(prompt.isNotBlank()) { "Skriv en fråga först." }
 
         return mutex.withLock {
@@ -68,7 +65,7 @@ class LocalAiEngine(context: Context) {
             val response = StringBuilder()
             // Qwen3 defaults to a visible reasoning phase. The /no_think switch
             // asks the model to produce the character's reply directly, leaving
-            // more of the token budget for the actual conversation.
+            // more of the response budget for the actual conversation.
             inference.sendUserPrompt("$prompt\n/no_think", predictLength = 1536).collect { token ->
                 response.append(token)
             }
