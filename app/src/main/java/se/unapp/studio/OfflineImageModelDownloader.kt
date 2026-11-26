@@ -5,6 +5,7 @@ import android.os.StatFs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
@@ -59,9 +60,7 @@ object OfflineImageModelDownloader {
                 } else connection.contentLengthLong
 
                 connection.inputStream.use { input ->
-                    partial.outputStream().let { raw ->
-                        (if (append) raw.apply { } else raw.apply { channel.truncate(0) })
-                            .buffered().use { output ->
+                    FileOutputStream(partial, append).buffered().use { output ->
                                 val buffer = ByteArray(128 * 1024)
                                 var downloaded = start
                                 while (true) {
@@ -71,7 +70,6 @@ object OfflineImageModelDownloader {
                                     downloaded += count
                                     if (total > 0) onProgress(((downloaded * 100) / total).toInt().coerceIn(0, 99))
                                 }
-                            }
                     }
                 }
 
