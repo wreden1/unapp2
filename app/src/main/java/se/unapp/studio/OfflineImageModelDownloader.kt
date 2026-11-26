@@ -76,8 +76,9 @@ object OfflineImageModelDownloader {
                 check(total <= 0 || partial.length() == total) {
                     "Nedladdningen är ofullständig. Försök igen så fortsätter den om servern stöder det."
                 }
-                check(sha256(partial) == EXPECTED_SHA256) {
-                    "Bildmodellens kontrollsumma stämmer inte. Den tillfälliga filen har tagits bort."
+                if (sha256(partial) != EXPECTED_SHA256) {
+                    partial.delete()
+                    error("Bildmodellens kontrollsumma stämmer inte. Ladda ner modellen igen.")
                 }
                 check(partial.renameTo(destination)) { "Kunde inte spara bildmodellen." }
                 onProgress(100)
