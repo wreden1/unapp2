@@ -333,7 +333,7 @@ private fun CharacterConversation(character: UnAppCharacter, onBack: () -> Unit)
                                 status = "AI loaded (" + ai.activeBackend + ")."
                             }
                             // LiteRT-LM keeps the complete turn history in its active conversation.
-                            val answer = ai.ask(message)
+                            val priorHistory = updated.dropLast(1).takeLast(10).map { it.fromUser to it.text }\n                            val answer = ai.ask(message, priorHistory)
                             val completedTranscript = updated + CharacterLine(false, answer)
                             lines = completedTranscript
                             putChat(context, character.id, completedTranscript)
