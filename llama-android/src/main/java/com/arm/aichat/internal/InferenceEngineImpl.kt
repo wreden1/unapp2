@@ -86,6 +86,9 @@ internal class InferenceEngineImpl private constructor(
     private external fun load(modelPath: String): Int
 
     @FastNative
+    private external fun lastNativeError(): String
+
+    @FastNative
     private external fun prepare(): Int
 
     @FastNative
@@ -170,7 +173,7 @@ internal class InferenceEngineImpl private constructor(
                 _state.value = InferenceEngine.State.LoadingModel
                 load(pathToModel).let {
                     // TODO-han.yin: find a better way to pass other error codes
-                    if (it != 0) throw UnsupportedArchitectureException()
+                    if (it != 0) throw UnsupportedArchitectureException(lastNativeError().ifBlank { "llama.cpp kunde inte läsa modellfilen. Kontrollera att GGUF-filen är komplett och stöds." })
                 }
                 prepare().let {
                     if (it != 0) throw IOException("Failed to prepare resources")
