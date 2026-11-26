@@ -10,7 +10,7 @@ android {
 
     defaultConfig {
         applicationId = "se.unapp.studio"
-        minSdk = 26
+        minSdk = 33
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
@@ -50,7 +50,7 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.10.0")
 
-    implementation("com.google.ai.edge.litertlm:litertlm-android:0.18.0")
+    implementation(project(":llama-android"))
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
