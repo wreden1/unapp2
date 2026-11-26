@@ -6,9 +6,11 @@ on:
     branches:
       - main
       - feature/character-studio
+      - feature/llama-cpp-engine
   pull_request:
     branches:
       - main
+      - feature/character-studio
 
 jobs:
   build:
@@ -16,6 +18,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -34,7 +38,7 @@ jobs:
           packages: 'platform-tools'
 
       - name: Install Android 36 SDK
-        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;29.0.13113456" "cmake;3.31.6"
 
       - name: Build debug APK
         run: gradle --no-daemon assembleDebug
