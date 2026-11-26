@@ -87,7 +87,7 @@ Java_se_unapp_studio_OfflineImageEngine_nativeGenerate(
     const int64_t image_height = image ? sd_tensor_dim(image, 2) : 0;
     const auto* bytes = image ? static_cast<const uint8_t*>(sd_tensor_data(image)) : nullptr;
 
-    if (sd_tensor_type(image) != SD_TENSOR_U8 || channels < 3 || channels > 4 ||
+    if (image == nullptr || sd_tensor_type(image) != SD_TENSOR_U8 || channels < 3 || channels > 4 ||
         image_width != width || image_height != height || bytes == nullptr) {
         sd_result_free(result);
         throw_java(env, "Bildmotorn returnerade ett bildformat som appen inte stöder.");
