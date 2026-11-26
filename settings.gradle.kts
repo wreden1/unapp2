@@ -4,4 +4,4 @@ dependencyResolutionManagement {
     repositories { google(); mavenCentral() }
 }
 rootProject.name = "UnApp"
-include(":app")
+include(":app", ":llama-android")
