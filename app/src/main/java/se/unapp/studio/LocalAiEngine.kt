@@ -13,6 +13,8 @@ import java.io.File
  * Offline inference adapter. The native llama.cpp engine is shared by the
  * Android binding; each character chat reloads its own system prompt/history.
  */
+internal const val CHAT_HISTORY_MESSAGE_LIMIT = 24
+
 class LocalAiEngine(context: Context) {
 
     private val inference: InferenceEngine = AiChat.getInferenceEngine(context.applicationContext)
@@ -49,7 +51,7 @@ class LocalAiEngine(context: Context) {
 
             inference.loadModel(modelFile.absolutePath)
             inference.setSystemPrompt(characterInstruction)
-            inference.setConversationHistory(initialHistory.takeLast(12))
+            inference.setConversationHistory(initialHistory.takeLast(CHAT_HISTORY_MESSAGE_LIMIT))
             loaded = true
         }
     }
