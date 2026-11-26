@@ -90,14 +90,17 @@ fun UnAppScreen() {
         if (showAppForge) {
             AppForgeScreen(
                 onBack = { showAppForge = false },
-                onGenerate = { request ->
-                    val modelFile = ModelDownloader.modelFile(context)
-                    check(modelFile.isFile) {
-                        "Den lokala AI-modellen saknas. Installera modellfilen på telefonen först."
+                onGenerate = { request, reportStatus ->
+                    var modelFile = ModelDownloader.modelFile(context)
+                    if (!modelFile.isFile) {
+                        reportStatus("Laddar ner AI-modellen första gången. Anslut till Wi-Fi och vänta...")
+                        modelFile = ModelDownloader.download(context)
                     }
                     if (!localAiEngine.isLoaded()) {
+                        reportStatus("Startar den lokala AI-motorn...")
                         localAiEngine.loadModel(modelFile)
                     }
+                    reportStatus("AI:n är ansluten. Skapar din appspecifikation...")
                     localAiEngine.ask(request)
                 }
             )
