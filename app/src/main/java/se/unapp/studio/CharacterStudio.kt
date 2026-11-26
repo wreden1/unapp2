@@ -3,6 +3,7 @@ package se.unapp.studio
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -54,7 +55,7 @@ data class UnAppCharacter(
     val speakingStyle: String,
     val imageUri: String? = null
 )
-private data class CharacterLine(val fromUser: Boolean, val text: String)
+private data class CharacterLine(val fromUser: Boolean, val text: String, val imagePath: String? = null)
 
 private fun characterInstruction(character: UnAppCharacter): String =
     """
@@ -99,12 +100,12 @@ private fun getChat(context: Context, id: String): List<CharacterLine> {
     val raw = context.getSharedPreferences(CSPrefs, Context.MODE_PRIVATE).getString("chat_" + id, "[]") ?: "[]"
     return try {
         val a = JSONArray(raw)
-        List(a.length()) { i -> val o = a.getJSONObject(i); CharacterLine(o.optBoolean("fromUser"), o.optString("text")) }
+        List(a.length()) { i -> val o = a.getJSONObject(i); CharacterLine(o.optBoolean("fromUser"), o.optString("text"), o.optString("imagePath").takeIf { it.isNotBlank() }) }
     } catch (_: Exception) { emptyList() }
 }
 private fun putChat(context: Context, id: String, lines: List<CharacterLine>) {
     val a = JSONArray()
-    lines.forEach { a.put(JSONObject().put("fromUser", it.fromUser).put("text", it.text)) }
+    lines.forEach { a.put(JSONObject().put("fromUser", it.fromUser).put("text", it.text).put("imagePath", it.imagePath ?: "")) }
     context.getSharedPreferences(CSPrefs, Context.MODE_PRIVATE).edit().putString("chat_" + id, a.toString()).apply()
 }
 
@@ -228,6 +229,15 @@ private fun CharacterConversation(character: UnAppCharacter, onBack: () -> Unit)
     var status by remember { mutableStateOf("Chat history is stored locally.") }
     var busy by remember { mutableStateOf(false) }
     var progress by remember { mutableIntStateOf(0) }
+    val imageModel = remember { OfflineImageModelDownloader.modelFile(context) }
+    val imageEngine = remember { OfflineImageEngine() }
+    var imageReady by remember { mutableStateOf(false) }
+    var imageBusy by remember { mutableStateOf(false) }
+    var imageProgress by remember { mutableIntStateOf(0) }
+    var imageStatus by remember { mutableStateOf("Bildgeneratorn är separat från chattens AI.") }
+    DisposableEffect(imageEngine) {
+        onDispose { imageEngine.close() }
+    }
     val typingTransition = rememberInfiniteTransition(label = "typing dots")
     val typingStep by typingTransition.animateFloat(
         initialValue = 1f,
@@ -278,6 +288,55 @@ private fun CharacterConversation(character: UnAppCharacter, onBack: () -> Unit)
             }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Load offline AI model") }
         }
         Text(status, color = CSMuted, fontSize = 10.sp)
+        CSCard {
+            Text("Offline bildgenerator", color = Color.White, fontWeight = FontWeight.Bold)
+            Text(
+                if (imageModel.isFile) "Bildmodellen finns på telefonen." else "Bildmodellen är ${OfflineImageModelDownloader.MODEL_SIZE_LABEL}. Ladda ner en gång med internet. Därefter fungerar bildskapandet offline.",
+                color = CSMuted, fontSize = 11.sp
+            )
+            if (imageBusy) LinearProgressIndicator(progress = { imageProgress / 100f }, modifier = Modifier.fillMaxWidth())
+            if (!imageModel.isFile) {
+                Button(
+                    onClick = {
+                        imageBusy = true
+                        imageStatus = "Laddar ner bildmodell..."
+                        scope.launch {
+                            try {
+                                OfflineImageModelDownloader.download(context) { imageProgress = it }
+                                imageStatus = "Bildmodellen är nedladdad. Laddar bildmotorn..."
+                                withContext(Dispatchers.IO) { imageEngine.load(imageModel, 4) }
+                                imageReady = true
+                                imageStatus = "Bildgeneratorn är redo och kan användas offline."
+                            } catch (e: Exception) {
+                                imageStatus = e.message ?: "Kunde inte installera bildmodellen."
+                            } finally { imageBusy = false }
+                        }
+                    },
+                    enabled = !imageBusy,
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text(if (imageBusy) "Laddar ner ${imageProgress}%" else "Ladda ner bildmodell (${OfflineImageModelDownloader.MODEL_SIZE_LABEL})") }
+            } else if (!imageReady) {
+                Button(
+                    onClick = {
+                        imageBusy = true
+                        scope.launch {
+                            try {
+                                withContext(Dispatchers.IO) { imageEngine.load(imageModel, 4) }
+                                imageReady = true
+                                imageStatus = "Bildgeneratorn är redo och fungerar offline."
+                            } catch (e: Exception) {
+                                imageStatus = e.message ?: "Kunde inte starta bildmotorn."
+                            } finally { imageBusy = false }
+                        }
+                    },
+                    enabled = !imageBusy,
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Starta bildgeneratorn") }
+            } else {
+                Text("Bildgeneratorn är redo.", color = Color(0xFF9BE7B0), fontSize = 12.sp)
+            }
+            Text(imageStatus, color = CSMuted, fontSize = 10.sp)
+        }
         Spacer(Modifier.height(6.dp))
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (lines.isEmpty()) item {
@@ -288,8 +347,14 @@ private fun CharacterConversation(character: UnAppCharacter, onBack: () -> Unit)
             }
             items(lines) { line ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = if (line.fromUser) Arrangement.End else Arrangement.Start) {
-                    Box(Modifier.widthIn(max = 290.dp).background(if (line.fromUser) Color(0xFF39305F) else CSPanel, RoundedCornerShape(14.dp)).padding(12.dp)) {
-                        Text(line.text, color = Color.White, fontSize = 14.sp)
+                    Column(
+                        Modifier.widthIn(max = 290.dp)
+                            .background(if (line.fromUser) Color(0xFF39305F) else CSPanel, RoundedCornerShape(14.dp))
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        if (line.text.isNotBlank()) Text(line.text, color = Color.White, fontSize = 14.sp)
+                        if (line.imagePath != null) GeneratedChatImage(line.imagePath)
                     }
                 }
             }
@@ -313,6 +378,39 @@ private fun CharacterConversation(character: UnAppCharacter, onBack: () -> Unit)
                 decorationBox = { inner -> Box { if (draft.isEmpty()) Text("Write a message...", color = CSMuted); inner() } }
             )
             Spacer(Modifier.width(7.dp))
+            OutlinedButton(
+                onClick = {
+                    val description = draft.trim()
+                    if (description.isNotBlank() && imageReady && !imageBusy) {
+                        imageBusy = true
+                        imageStatus = "Skapar bild lokalt på telefonen. Det kan ta en stund..."
+                        draft = ""
+                        scope.launch {
+                            try {
+                                val prompt = "Photorealistic DSLR photograph of an adult fictional woman named ${character.name}, age ${character.age}. Appearance: ${character.appearance}. Scene and pose: $description. Realistic natural skin texture, anatomically correct, detailed face, natural lighting, candid photography, 35mm lens."
+                                val pixels = withContext(Dispatchers.IO) {
+                                    imageEngine.generate(prompt, 512, 512, 20, -1L)
+                                }
+                                val bitmap = Bitmap.createBitmap(pixels, 512, 512, Bitmap.Config.ARGB_8888)
+                                val directory = java.io.File(context.filesDir, "generated-images")
+                                if (!directory.exists()) check(directory.mkdirs()) { "Kunde inte skapa bildmappen." }
+                                val imageFile = java.io.File(directory, "image-${UUID.randomUUID()}.png")
+                                imageFile.outputStream().use { output ->
+                                    check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) { "Kunde inte spara bilden." }
+                                }
+                                bitmap.recycle()
+                                val completed = lines + CharacterLine(false, "Här är bilden.", imageFile.absolutePath)
+                                lines = completed
+                                putChat(context, character.id, completed)
+                                imageStatus = "Bilden är skapad och sparad lokalt."
+                            } catch (e: Exception) {
+                                imageStatus = e.message ?: "Bildgenereringen misslyckades."
+                            } finally { imageBusy = false }
+                        }
+                    }
+                },
+                enabled = draft.isNotBlank() && imageReady && !imageBusy && !busy
+            ) { Text("Bild") }
             Button(onClick = {
                 val message = draft.trim()
                 if (message.isNotEmpty() && !busy) {
@@ -341,6 +439,21 @@ private fun CharacterConversation(character: UnAppCharacter, onBack: () -> Unit)
             }, enabled = draft.isNotBlank() && !busy) { Text("Send") }
         }
         Text("The AI model must be downloaded before chatting offline.", color = CSMuted, fontSize = 10.sp)
+    }
+}
+
+@Composable
+private fun GeneratedChatImage(path: String) {
+    var bitmap by remember(path) { mutableStateOf<Bitmap?>(null) }
+    LaunchedEffect(path) {
+        bitmap = withContext(Dispatchers.IO) { BitmapFactory.decodeFile(path) }
+    }
+    if (bitmap != null) {
+        Image(
+            bitmap = bitmap!!.asImageBitmap(),
+            contentDescription = "AI-generated character image",
+            modifier = Modifier.fillMaxWidth().heightIn(max = 340.dp)
+        )
     }
 }
 
