@@ -31,7 +31,7 @@ constexpr int   N_THREADS_HEADROOM      = 2;
 constexpr int   DEFAULT_CONTEXT_SIZE    = 8192;
 constexpr int   OVERFLOW_HEADROOM       = 4;
 constexpr int   BATCH_SIZE              = 512;
-constexpr float DEFAULT_SAMPLER_TEMP    = 0.78f;
+constexpr float DEFAULT_SAMPLER_TEMP    = 0.88f;
 
 static llama_model                      * g_model;
 static llama_context                    * g_context;
@@ -121,12 +121,12 @@ static llama_context *init_context(llama_model *model, const int n_ctx = DEFAULT
 static common_sampler *new_sampler(float temp) {
     common_params_sampling sparams;
     sparams.temp = temp;
-    sparams.top_k = 40;
-    sparams.top_p = 0.92f;
+    sparams.top_k = 50;
+    sparams.top_p = 0.95f;
     sparams.penalty_last_n = 128;
-    sparams.penalty_repeat = 1.05f;
-    sparams.penalty_freq = 0.0f;
-    sparams.penalty_present = 0.0f;
+    sparams.penalty_repeat = 1.12f;
+    sparams.penalty_freq = 0.08f;
+    sparams.penalty_present = 0.12f;
     return common_sampler_init(g_model, sparams);
 }
 
