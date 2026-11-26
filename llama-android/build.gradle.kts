@@ -57,4 +57,7 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+    dependencies {
+        implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    }
 }
