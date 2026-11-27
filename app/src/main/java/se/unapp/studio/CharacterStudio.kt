@@ -61,12 +61,7 @@ private data class CharacterLine(val fromUser: Boolean, val text: String, val im
 private fun characterInstruction(character: UnAppCharacter): String =
     """
     You are roleplaying as the fictional character ${character.name}, age ${character.age}.
-    Personality direction: ${when (character.category) {
-        "Tonårstjej" -> "teenage girl-inspired, youthful and natural"
-        "Tonårspojke" -> "teenage boy-inspired, youthful and natural"
-        "Kvinna" -> "woman-inspired"
-        else -> "man-inspired"
-    }}. This guides personality and expression only; it does not change the entered age.
+    Visual category: ${character.category}. This is only a visual label for a future image generator. It must not affect personality, behavior, role, or interpretation of age. The entered age is the only age information.
     Appearance: ${character.appearance}.
     Personality: ${character.personality}.
     Background and memories: ${character.background}.
@@ -162,7 +157,7 @@ fun CharacterStudioScreen(onClose: () -> Unit) {
                     ?: error("Profilen har en ogiltig ålder.")
                 val storedCategory = json.optString("category", "Kvinna")
                 val importedCategory = if (storedCategory == "Barn") "Tonårstjej" else storedCategory
-                require(importedCategory in listOf("Tonårstjej", "Tonårspojke", "Kvinna", "Man")) { "Profilen har en okänd personlighetsinriktning." }
+                require(importedCategory in listOf("Tonårstjej", "Tonårspojke", "Kvinna", "Man", "Skolflicka", "Flicka", "Tjej")) { "Profilen har en okänd visuell kategori." }
                 require(importedAge > 0) { "Åldern måste vara större än noll." }
                 val imported = UnAppCharacter(
                     id = UUID.randomUUID().toString(),
@@ -281,14 +276,14 @@ private fun CharacterForm(existing: UnAppCharacter?, onCancel: () -> Unit, onSav
         item { CSField("Ålder", age, { age = it }, "25") }
         item {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("Personlighetsinriktning", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                listOf("Tonårstjej", "Tonårspojke", "Kvinna", "Man").forEach { option ->
+                Text("Visuell kategori", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                listOf("Tonårstjej", "Tonårspojke", "Kvinna", "Man", "Skolflicka", "Flicka", "Tjej").forEach { option ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = category == option, onCheckedChange = { if (it) category = option })
                         Text(option, color = Color.White, fontSize = 12.sp)
                     }
                 }
-                Text("Välj en inriktning. Den påverkar personlighet och uttryck – inte åldern ovan.", color = CSMuted, fontSize = 10.sp)
+                Text("Valet är endast en visuell etikett för en framtida bildgenerator. Det påverkar inte chattens beteende eller ålder. Åldern anges separat ovan.", color = CSMuted, fontSize = 10.sp)
             }
         }
         item { CSField("Utseende", appearance, { appearance = it }, "Hår, ögon, kläder, stil...") }
