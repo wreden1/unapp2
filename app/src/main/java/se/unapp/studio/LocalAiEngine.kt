@@ -13,8 +13,9 @@ internal const val CHAT_HISTORY_MESSAGE_LIMIT = 24
 
 class LocalAiEngine(context: Context) {
     private val inference: InferenceEngine = AiChat.getInferenceEngine(context.applicationContext)
-    private val mutex = Mutex()
+    private val mutex = sharedMutex
     @Volatile private var loaded = false
+    private var loadedInstruction: String? = null
 
     val activeBackend: String
         get() = "llama.cpp (ARM CPU acceleration when available)"
@@ -26,30 +27,37 @@ class LocalAiEngine(context: Context) {
     ) {
         mutex.withLock {
             require(modelFile.isFile) { "AI-modellen hittades inte: ${modelFile.absolutePath}" }
+            loaded = false
+            loadedInstruction = null
+            activeInstruction = null
             val readyState = inference.state.first {
-                it is InferenceEngine.State.Initialized || it is InferenceEngine.State.Error
+                it is InferenceEngine.State.Initialized ||
+                    it is InferenceEngine.State.ModelReady ||
+                    it is InferenceEngine.State.Error
             }
-            if (readyState is InferenceEngine.State.Error) throw readyState.exception
-            when (inference.state.value) {
-                is InferenceEngine.State.ModelReady -> inference.cleanUp()
-                is InferenceEngine.State.Error -> inference.cleanUp()
-                else -> Unit
-            }
+            if (readyState is InferenceEngine.State.Error) inference.cleanUp()
+            else if (readyState is InferenceEngine.State.ModelReady) inference.cleanUp()
+
             inference.loadModel(modelFile.absolutePath)
             inference.setSystemPrompt(characterInstruction)
             inference.setConversationHistory(initialHistory.takeLast(CHAT_HISTORY_MESSAGE_LIMIT))
+            loadedInstruction = characterInstruction
+            activeInstruction = characterInstruction
             loaded = true
         }
     }
 
-    suspend fun ask(prompt: String, recentHistory: List<Pair<Boolean, String>> = emptyList()): String {
+    suspend fun ask(prompt: String, recentHistory: List<Pair<Boolean, String>>? = null): String {
         require(prompt.isNotBlank()) { "Skriv en fråga först." }
         return mutex.withLock {
-            check(loaded && inference.state.value is InferenceEngine.State.ModelReady) {
-                "AI-modellen är inte laddad ännu."
+            check(loaded && loadedInstruction != null &&
+                activeInstruction == loadedInstruction &&
+                inference.state.value is InferenceEngine.State.ModelReady) {
+                "AI-sessionen har bytts till en annan chatt. Ladda Testchattens AI igen."
             }
-            // Only Testchatt supplies a selected history; other callers keep existing behavior.
-            if (recentHistory.isNotEmpty()) {
+            // A non-null history means the caller owns the conversation context.
+            // Legacy callers pass null and keep the inference engine's current history.
+            if (recentHistory != null) {
                 inference.setConversationHistory(recentHistory.takeLast(CHAT_HISTORY_MESSAGE_LIMIT))
             }
             val response = StringBuilder()
@@ -67,11 +75,24 @@ class LocalAiEngine(context: Context) {
 
     suspend fun close() {
         mutex.withLock {
-            if (loaded && inference.state.value is InferenceEngine.State.ModelReady) inference.cleanUp()
+            if (loaded && activeInstruction == loadedInstruction &&
+                inference.state.value is InferenceEngine.State.ModelReady) {
+                inference.cleanUp()
+                activeInstruction = null
+            }
             loaded = false
+            loadedInstruction = null
         }
     }
 
     fun isLoaded(): Boolean =
-        loaded && inference.state.value is InferenceEngine.State.ModelReady
+        loaded && loadedInstruction != null &&
+            activeInstruction == loadedInstruction &&
+            inference.state.value is InferenceEngine.State.ModelReady
+
+    companion object {
+        // AiChat returns one process-wide inference engine. All wrappers must share one lock.
+        private val sharedMutex = Mutex()
+        @Volatile private var activeInstruction: String? = null
+    }
 }
