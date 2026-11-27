@@ -10,6 +10,7 @@ on:
       - feature/offline-image-generation
       - feature/testchatt-long-term-memory
       - feature/testchat-character-selection
+      - feature/unified-chat-character-profiles
   pull_request:
     branches:
       - main
