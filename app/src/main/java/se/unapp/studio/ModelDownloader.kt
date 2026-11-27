@@ -2,6 +2,7 @@ package se.unapp.studio
 
 import android.content.Context
 import android.os.StatFs
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -92,7 +93,7 @@ object ModelDownloader {
 
             // Some mirrors ignore Range requests. In that case restart cleanly
             // instead of appending a full response to the partial file.
-            if (downloaded > 0L && response == HttpURLConnection.HTTP_OK) {
+            if (downloaded > 0L && (response == HttpURLConnection.HTTP_OK || response == 416)) {
                 activeConnection.disconnect()
                 temporary.delete()
                 downloaded = 0L
@@ -180,6 +181,7 @@ object ModelDownloader {
             onDetailedProgress(ModelDownloadProgress(destination.length(), destination.length(), 100, "AI-modellen är installerad och klar"))
             destination
         } catch (error: Exception) {
+            if (error is CancellationException) throw error
             // Keep the .part file after network interruptions so the next
             // attempt can resume instead of downloading the entire model again.
             throw IllegalStateException(
