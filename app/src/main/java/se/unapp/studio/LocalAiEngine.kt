@@ -49,7 +49,7 @@ class LocalAiEngine(context: Context) {
 
             inference.loadModel(modelFile.absolutePath)
             inference.setSystemPrompt(characterInstruction)
-            inference.setConversationHistory(initialHistory.takeLast(12))
+            inference.setConversationHistory(initialHistory.takeLast(20))
             loaded = true
         }
     }
