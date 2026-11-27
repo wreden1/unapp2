@@ -535,15 +535,15 @@ fun TestChatScreen(onClose: () -> Unit) {
                                     append("UNDVIK ATT UPPREPA DIG: Skriv inte om samma svar med små variationer. " +
                                         "Återanvänd inte samma öppningsfras, följdfråga eller avslutning. " +
                                         "Svara med nya, konkreta detaljer och för samtalet framåt. " +
-                                        "Dina senaste svar som du ska undvika att kopiera är:\\n")
-                                    recentAssistantReplies.forEach { append("- ").append(it.second.take(260)).append("\\n") }
-                                    append("\\n")
+                                        "Dina senaste svar som du ska undvika att kopiera är:\n")
+                                    recentAssistantReplies.forEach { append("- ").append(it.second.take(260)).append("\n") }
+                                    append("\n")
                                 }
                                 append(
                                     "SPEL OCH SAMMANHANG: Om användaren vill leka, spela ett spel eller lösa en gåta, " +
                                     "delta aktivt och fortsätt från tidigare ledtrådar och regler. Ta själv initiativ: " +
                                     "starta scenen, skapa en överraskning eller gör första draget i spelet. " +
-                                    "Blockera inte en vanlig lek bara för att ålder nämns.\\n\\n"
+                                    "Blockera inte en vanlig lek bara för att ålder nämns.\n\n"
                                 )
                                 append(
                                     "UPPGIFT: Svara direkt på det senaste användarmeddelandet. " +
