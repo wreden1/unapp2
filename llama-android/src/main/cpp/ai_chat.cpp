@@ -428,6 +428,19 @@ Java_com_arm_aichat_internal_InferenceEngineImpl_processConversationHistory(
     const jsize count = env->GetArrayLength(jhistory);
     if (count % 2 != 0) return 1;
 
+    // Rebuild the selected context from the system prompt on every restore.
+    // Without this reset, each turn appends the same history again and causes
+    // duplicated messages, context growth, and increasingly repetitive replies.
+    llama_memory_seq_rm(llama_get_memory(g_context), 0, system_prompt_position, current_position);
+    current_position = system_prompt_position;
+    if (!chat_msgs.empty() && chat_msgs.front().role == ROLE_SYSTEM) {
+        const auto system_message = chat_msgs.front();
+        chat_msgs.clear();
+        chat_msgs.push_back(system_message);
+    } else {
+        chat_msgs.clear();
+    }
+
     for (jsize i = 0; i < count; i += 2) {
         auto jrole = (jstring) env->GetObjectArrayElement(jhistory, i);
         auto jcontent = (jstring) env->GetObjectArrayElement(jhistory, i + 1);

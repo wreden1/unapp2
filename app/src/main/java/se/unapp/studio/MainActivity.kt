@@ -77,6 +77,7 @@ fun UnAppScreen() {
     var result by remember { mutableStateOf("") }
     var showAppForge by remember { mutableStateOf(false) }
     var showCharacterStudio by remember { mutableStateOf(false) }
+    var showTestChat by remember { mutableStateOf(false) }
     var isChatGenerating by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     var savedProjects by remember {
@@ -159,6 +160,13 @@ fun UnAppScreen() {
                         shape = RoundedCornerShape(14.dp)
                     ) {
                         Text("Öppna chatt – Character Studio")
+                    }
+                    OutlinedButton(
+                        onClick = { showTestChat = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        Text("Öppna Testchatt – nytt minnessystem")
                     }
                 }
 
@@ -386,6 +394,14 @@ fun UnAppScreen() {
                 properties = DialogProperties(usePlatformDefaultWidth = false)
             ) {
                 CharacterStudioScreen(onClose = { showCharacterStudio = false })
+            }
+        }
+        if (showTestChat) {
+            Dialog(
+                onDismissRequest = { showTestChat = false },
+                properties = DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                TestChatScreen(onClose = { showTestChat = false })
             }
         }
     }

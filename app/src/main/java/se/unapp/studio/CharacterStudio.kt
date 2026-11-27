@@ -271,7 +271,7 @@ private fun CharacterConversation(character: UnAppCharacter, onBack: () -> Unit)
                     busy = true
                     scope.launch {
                         try {
-                            ModelDownloader.download(context) { progress = it }
+                            ModelDownloader.download(context, onProgress = { progress = it })
                             ai.loadModel(model, characterInstruction(character), lines.takeLast(CHAT_HISTORY_MESSAGE_LIMIT).map { it.fromUser to it.text })
                             status = "Offline AI ready (" + ai.activeBackend + ")."
                         } catch (e: Exception) { status = e.message ?: "Download failed." }

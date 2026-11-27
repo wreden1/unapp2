@@ -8,6 +8,7 @@ on:
       - feature/character-studio
       - feature/llama-cpp-engine
       - feature/offline-image-generation
+      - feature/testchatt-long-term-memory
   pull_request:
     branches:
       - main
