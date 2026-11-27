@@ -220,7 +220,9 @@ fun TestChatScreen(onClose: () -> Unit) {
                 }
                 Text(downloadStage, color = TCMuted, fontSize = 10.sp)
                 Text(
-                    if (percent != null && progress.totalBytes > 0) {
+                    if (downloadStage.startsWith("Kontrollerar befintlig")) {
+                        "Kontrollerar ${formatModelBytes(progress.downloadedBytes)} lokalt"
+                    } else if (percent != null && progress.totalBytes > 0) {
                         "$percent% · ${formatModelBytes(progress.downloadedBytes)} av ${formatModelBytes(progress.totalBytes)}"
                     } else {
                         "${formatModelBytes(progress.downloadedBytes)} hämtade · storleken beräknas…"
