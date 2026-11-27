@@ -84,7 +84,10 @@ private fun getCharacters(context: Context): List<UnAppCharacter> {
             UnAppCharacter(o.optString("id"), o.optString("name"), o.optString("age", "25"),
                 o.optString("appearance"), o.optString("personality"), o.optString("background"),
                 o.optString("speakingStyle"), o.optString("imageUri").takeIf { it.isNotBlank() },
-                o.optString("category", "Kvinna"))
+                when (o.optString("category", "Kvinna")) {
+                    "Barn" -> "Tonårstjej"
+                    else -> o.optString("category", "Kvinna")
+                })
         }
     } catch (_: Exception) { emptyList() }
 }
@@ -151,11 +154,10 @@ fun CharacterStudioScreen(onClose: () -> Unit) {
                 require(json.optString("format") == "unapp-character-profile") { "Filen är inte en UnApp-karaktärsprofil." }
                 val importedAge = json.optString("age", "25").toIntOrNull()
                     ?: error("Profilen har en ogiltig ålder.")
-                val importedCategory = json.optString("category", "Kvinna")
-                require(importedCategory in listOf("Kvinna", "Man", "Barn")) { "Profilen har en okänd karaktärstyp." }
-                require(importedAge > 0 && ((importedCategory == "Barn" && importedAge < 18) || (importedCategory != "Barn" && importedAge >= 18))) {
-                    "Åldern stämmer inte med karaktärstypen."
-                }
+                val storedCategory = json.optString("category", "Kvinna")
+                val importedCategory = if (storedCategory == "Barn") "Tonårstjej" else storedCategory
+                require(importedCategory in listOf("Tonårstjej", "Tonårspojke", "Kvinna", "Man")) { "Profilen har en okänd personlighetsinriktning." }
+                require(importedAge > 0) { "Åldern måste vara större än noll." }
                 val imported = UnAppCharacter(
                     id = UUID.randomUUID().toString(),
                     name = json.optString("name"),
