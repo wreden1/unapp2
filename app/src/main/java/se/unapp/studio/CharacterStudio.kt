@@ -273,34 +273,28 @@ private fun CharacterForm(existing: UnAppCharacter?, onCancel: () -> Unit, onSav
         item { CSField("Ålder", age, { age = it }, "25") }
         item {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("Karaktärstyp", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = category == "Kvinna", onCheckedChange = { if (it) category = "Kvinna" })
-                    Text("Kvinna", color = Color.White, fontSize = 12.sp)
+                Text("Personlighetsinriktning", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                listOf("Tonårstjej", "Tonårspojke", "Kvinna", "Man").forEach { option ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = category == option, onCheckedChange = { if (it) category = option })
+                        Text(option, color = Color.White, fontSize = 12.sp)
+                    }
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = category == "Man", onCheckedChange = { if (it) category = "Man" })
-                    Text("Man", color = Color.White, fontSize = 12.sp)
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = category == "Barn", onCheckedChange = { if (it) category = "Barn" })
-                    Text("Barn", color = Color.White, fontSize = 12.sp)
-                }
-                Text("Välj en typ. Endast ett alternativ kan vara markerat.", color = CSMuted, fontSize = 10.sp)
+                Text("Välj en inriktning. Den påverkar personlighet och uttryck – inte åldern ovan.", color = CSMuted, fontSize = 10.sp)
             }
         }
         item { CSField("Utseende", appearance, { appearance = it }, "Hår, ögon, kläder, stil...") }
         item { CSField("Personlighet", personality, { personality = it }, "Självsäker, omtänksam, rolig...") }
         item { CSField("Bakgrund", history, { history = it }, "Historia, mål, minnen...") }
         item { CSField("Sätt att prata", voice, { voice = it }, "Varm, sarkastisk, poetisk...") }
-        item { Text("Vuxna karaktärer måste vara minst 18 år. Barnprofiler hålls barnanpassade.", color = CSMuted, fontSize = 11.sp) }
+        item { Text("Åldern anges separat. Personlighetsinriktningen ändrar inte åldern.", color = CSMuted, fontSize = 11.sp) }
     }
     Spacer(Modifier.height(8.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text("Avbryt") }
         Button(
-            onClick = { val n = age.toIntOrNull(); if (name.isNotBlank() && n != null && n > 0 && ((category == "Barn" && n < 18) || (category != "Barn" && n >= 18))) onSave(UnAppCharacter(id = existing?.id ?: UUID.randomUUID().toString(), name = name.trim(), age = n.toString(), appearance = appearance, personality = personality, background = history, speakingStyle = voice, imageUri = picture, category = category)) },
-            enabled = name.isNotBlank() && (age.toIntOrNull()?.let { it > 0 && ((category == "Barn" && it < 18) || (category != "Barn" && it >= 18)) } == true),
+            onClick = { val n = age.toIntOrNull(); if (name.isNotBlank() && n != null && n > 0) onSave(UnAppCharacter(id = existing?.id ?: UUID.randomUUID().toString(), name = name.trim(), age = n.toString(), appearance = appearance, personality = personality, background = history, speakingStyle = voice, imageUri = picture, category = category)) },
+            enabled = name.isNotBlank() && (age.toIntOrNull()?.let { it > 0 } == true),
             modifier = Modifier.weight(1f)
         ) { Text("Spara profil") }
     }
