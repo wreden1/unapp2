@@ -74,6 +74,7 @@ fun AppForgeScreen(
     val scope = rememberCoroutineScope()
     var appName by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
+    var previewInstructions by remember { mutableStateOf("") }
     var allowedRules by remember { mutableStateOf("") }
     var blockedRules by remember { mutableStateOf("") }
     var allowInternet by remember { mutableStateOf(false) }
@@ -193,7 +194,7 @@ fun AppForgeScreen(
                         Text(blueprint, color = Color.White, fontSize = 13.sp, lineHeight = 19.sp)
                         Spacer(Modifier.height(12.dp))
                         OutlinedButton(onClick = {
-                            val saved = projects + ForgeProject(appName.ifBlank { "Min app" }, description, blueprint)
+                            val saved = projects + ForgeProject(appName.ifBlank { "Min app" }, description, blueprint, previewInstructions)
                             projects = saved
                             saveForgeProjects(context, saved)
                             status = "Appspecifikationen har sparats lokalt."
