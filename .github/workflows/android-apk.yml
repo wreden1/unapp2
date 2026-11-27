@@ -69,3 +69,4 @@ jobs:
 # Rebuild after Testchatt-only character prompt fix.
 
 # Rebuild Testchatt after clearer character identity and speaker separation.
+# Rebuild after character profile Kotlin string interpolation fix.
