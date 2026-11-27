@@ -296,7 +296,7 @@ fun TestChatScreen(onClose: () -> Unit) {
 
             status = "Kontrollerar AI-modellen och förbereder den…"
             downloadStage = "Startar AI-motorn på telefonen…"
-            ai.loadModel(modelFile, testChatInstruction(selectedCharacter))
+            withContext(Dispatchers.IO) { ai.loadModel(modelFile, testChatInstruction(selectedCharacter)) }
             aiReady = true
             status = "AI:n är redo. Testchatt kör nu lokalt på telefonen."
         } catch (error: Throwable) {
@@ -315,7 +315,7 @@ fun TestChatScreen(onClose: () -> Unit) {
             }
             TextButton(onClick = {
                 scope.launch {
-                    runCatching { ai.close() }
+                    runCatching { withContext(Dispatchers.IO) { ai.close() } }
                     onClose()
                 }
             }) { Text("Stäng", color = TCAccent) }
@@ -356,7 +356,7 @@ fun TestChatScreen(onClose: () -> Unit) {
                             scope.launch {
                                 aiLoading = true; aiReady = false; loadError = ""
                                 try {
-                                    ai.loadModel(ModelDownloader.modelFile(context), TEST_CHAT_DEFAULT_INSTRUCTION)
+                                    withContext(Dispatchers.IO) { ai.loadModel(ModelDownloader.modelFile(context), TEST_CHAT_DEFAULT_INSTRUCTION) }
                                     aiReady = true; status = "Vanliga chatten är redo."
                                 } catch (error: Throwable) {
                                     loadError = error.message ?: error.javaClass.simpleName
@@ -375,7 +375,7 @@ fun TestChatScreen(onClose: () -> Unit) {
                                 scope.launch {
                                     aiLoading = true; aiReady = false; loadError = ""
                                     try {
-                                        ai.loadModel(ModelDownloader.modelFile(context), testChatInstruction(character))
+                                        withContext(Dispatchers.IO) { ai.loadModel(ModelDownloader.modelFile(context), testChatInstruction(character)) }
                                         aiReady = true; status = "Karaktären " + character.name + " är redo i UnApp-chatten."
                                     } catch (error: Throwable) {
                                         loadError = error.message ?: error.javaClass.simpleName
@@ -529,7 +529,7 @@ fun TestChatScreen(onClose: () -> Unit) {
                                 append(question)
                             }
                             status = "Letar i historiken och skapar svar offline…"
-                            val answer = ai.ask(prompt, selectedHistory)
+                            val answer = withContext(Dispatchers.IO) { ai.ask(prompt, selectedHistory) }
                             val reply = TestChatLine(false, answer)
                             withContext(Dispatchers.IO) { store.append(reply) }
                             val replyBackupUri = backupUriText
