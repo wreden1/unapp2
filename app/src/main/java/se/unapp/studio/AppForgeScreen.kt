@@ -1,6 +1,7 @@
 package se.unapp.studio
 
 import android.content.Context
+import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -9,6 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
@@ -90,6 +92,23 @@ fun AppForgeScreen(
     var allowFiles by remember { mutableStateOf(true) }
     var isGenerating by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
+    var generationStartedAt by remember { mutableLongStateOf(0L) }
+    var lastProgressAt by remember { mutableLongStateOf(0L) }
+    var elapsedSeconds by remember { mutableIntStateOf(0) }
+    var isStalled by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isGenerating) {
+        if (isGenerating) {
+            while (isGenerating) {
+                delay(1000)
+                val now = SystemClock.elapsedRealtime()
+                elapsedSeconds = ((now - generationStartedAt) / 1000L).toInt()
+                isStalled = now - lastProgressAt >= 30_000L
+            }
+        } else {
+            isStalled = false
+        }
+    }
     var blueprint by remember { mutableStateOf("") }
     var projects by remember { mutableStateOf(loadForgeProjects(context)) }
     var previewProject by remember { mutableStateOf<ForgeProject?>(null) }
@@ -173,6 +192,10 @@ fun AppForgeScreen(
                     Button(
                         onClick = {
                             isGenerating = true
+                            generationStartedAt = SystemClock.elapsedRealtime()
+                            lastProgressAt = generationStartedAt
+                            elapsedSeconds = 0
+                            isStalled = false
                             status = "AI:n arbetar lokalt..."
                             blueprint = ""
                             val request = buildString {
@@ -193,7 +216,11 @@ fun AppForgeScreen(
                             }
                             scope.launch {
                                 try {
-                                    blueprint = onGenerate(request) { progress -> status = progress }
+                                    blueprint = onGenerate(request) {
+                                        progress ->
+                                        status = progress
+                                        lastProgressAt = SystemClock.elapsedRealtime()
+                                    }
                                     status = if (blueprint.isBlank()) "AI:n gav inget resultat. Försök igen." else "Appspecifikationen är skapad."
                                 } catch (error: Throwable) {
                                     status = error.message ?: "Det gick inte att skapa appspecifikationen."
@@ -219,6 +246,10 @@ fun AppForgeScreen(
                             val prompt = typedInstructions.trim()
                             if (prompt.isNotEmpty()) {
                                 isGenerating = true
+                                generationStartedAt = SystemClock.elapsedRealtime()
+                                lastProgressAt = generationStartedAt
+                                elapsedSeconds = 0
+                                isStalled = false
                                 status = "AI:n arbetar med dina instruktioner..."
                                 val request = buildString {
                                     appendLine("Du är AppForge AI, en lokal Android-appbyggare. Svara på svenska.")
@@ -241,7 +272,11 @@ fun AppForgeScreen(
                                 }
                                 scope.launch {
                                     try {
-                                        val answer = onGenerate(request) { progress -> status = progress }
+                                        val answer = onGenerate(request) {
+                                            progress ->
+                                            status = progress
+                                            lastProgressAt = SystemClock.elapsedRealtime()
+                                        }
                                         if (answer.isNotBlank()) {
                                             blueprint = answer
                                             status = "AI:n har svarat. Du kan skriva nästa instruktion i rutan."
@@ -262,7 +297,63 @@ fun AppForgeScreen(
                     Text("Välj antingen «Aktivera befintliga knappar» eller «Skriv instruktioner istället» för att fortsätta.", color = ForgeMuted, fontSize = 12.sp)
                 }
 
-                if (status.isNotBlank()) Text(status, color = ForgeMuted, fontSize = 13.sp)
+                if (isGenerating) {
+                    Column(
+                        Modifier.fillMaxWidth()
+                            .background(ForgePanel, RoundedCornerShape(14.dp))
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(9.dp)
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("SKAPANDE PÅGÅR", color = ForgeAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                String.format("%02d:%02d", elapsedSeconds / 60, elapsedSeconds % 60),
+                                color = ForgeMuted,
+                                fontSize = 12.sp
+                            )
+                        }
+                        LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = ForgeAccent,
+                            trackColor = ForgeMuted.copy(alpha = 0.18f)
+                        )
+                        Text(status.ifBlank { "Väntar på lokal AI..." }, color = Color.White, fontSize = 13.sp)
+                        if (isStalled) {
+                            Text(
+                                "Ingen ny status har kommit på 30 sekunder. AI:n kan fortfarande arbeta, men processen kan ha fastnat. Vänta lite till eller kontrollera om modellen svarar.",
+                                color = Color(0xFFFFC56E),
+                                fontSize = 12.sp,
+                                lineHeight = 17.sp
+                            )
+                        } else {
+                            Text(
+                                "Övervakar verkliga statusuppdateringar från skapandet. Ingen påhittad procent visas.",
+                                color = ForgeMuted,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+                }
+                if (!isGenerating && status.isNotBlank()) {
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .background(ForgePanel, RoundedCornerShape(12.dp))
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            if (blueprint.isNotBlank()) "✓" else "!",
+                            color = if (blueprint.isNotBlank()) Color(0xFF75D69A) else Color(0xFFFFC56E),
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(status, color = ForgeMuted, fontSize = 13.sp)
+                    }
+                }
                 if (blueprint.isNotBlank()) {
                     Column(Modifier.fillMaxWidth().background(ForgePanel, RoundedCornerShape(16.dp)).padding(14.dp)) {
                         Text("APPENS PLAN", color = ForgeAccent, fontWeight = FontWeight.Bold, fontSize = 12.sp)
