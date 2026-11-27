@@ -204,13 +204,8 @@ private fun testChatInstruction(character: UnAppCharacter?): String {
         IDENTITET OCH ROLL:
         Du ÄR ${character.name}, en egen fiktiv ${character.category.lowercase()} på ${character.age} år.
         Du är inte användaren. Du spelar inte upp användarens repliker.
-        ${when (character.category) {
-            "Tonårstjej" -> "Personlighetsinriktning: tonårstjej – använd ett ungdomligt, självständigt och naturligt uttryck."
-            "Tonårspojke" -> "Personlighetsinriktning: tonårspojke – använd ett ungdomligt, självständigt och naturligt uttryck."
-            "Kvinna" -> "Personlighetsinriktning: kvinna – använd ett vuxet kvinnligt perspektiv och uttryck."
-            else -> "Personlighetsinriktning: man – använd ett vuxet manligt perspektiv och uttryck."
-        }}
-        Personlighetsinriktningen ändrar inte den ålder som står i profilen.
+        Visuell kategori: ${character.category}. Detta är endast en visuell etikett för en framtida bildgenerator och får inte påverka chattens personlighet, beteende eller tolkning av ålder.
+        Åldern i profilens åldersfält är den enda åldersuppgiften.
         ${if ((character.age.toIntOrNull() ?: 18) < 18) "Karaktären är under 18 år. Håll allt innehåll åldersanpassat och icke-sexuellt." else "Karaktären är vuxen enligt den angivna åldern. Flirt, romantik och mogna relationsteman mellan vuxna kan hanteras naturligt."}
         Du ska tänka, känna, minnas och svara utifrån din egen karaktär.
 
@@ -558,12 +553,7 @@ fun TestChatScreen(onClose: () -> Unit) {
                                     append(
                                         "AKTIV KARAKTÄR – DETTA GÄLLER DIG I VARJE SVAR:\n" +
                                         "Du är ${character.name}, en fiktiv karaktär på ${character.age} år. Du talar som ${character.name} i jag-form. " +
-                                        (when (character.category) {
-                                            "Tonårstjej" -> "Din personlighetsinriktning är tonårstjej: använd ett ungdomligt, självständigt och naturligt uttryck. "
-                                            "Tonårspojke" -> "Din personlighetsinriktning är tonårspojke: använd ett ungdomligt, självständigt och naturligt uttryck. "
-                                            "Kvinna" -> "Din personlighetsinriktning är kvinna: använd ett vuxet kvinnligt perspektiv och uttryck. "
-                                            else -> "Din personlighetsinriktning är man: använd ett vuxet manligt perspektiv och uttryck. "
-                                        }) +
+                                        "Profilens visuella kategori är endast en etikett för en framtida bildgenerator och påverkar inte ditt beteende. " +
                                         (if ((character.age.toIntOrNull() ?: 18) < 18) "Eftersom åldern är under 18 ska innehållet vara åldersanpassat och icke-sexuellt. " else "Karaktären är vuxen enligt den angivna åldern. Flirt, romantik och mogna relationsteman mellan vuxna kan hanteras naturligt. ") +
                                         "Du är samtalspartnern, medan personen som skriver är användaren. " +
                                         "Du får aldrig ta över användarens berättelser, känslor, handlingar eller formuleringar. " +
