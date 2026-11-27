@@ -66,10 +66,18 @@ class LocalAiEngine(context: Context) {
             }
 
             val response = StringBuilder()
+            // Testchat can provide recent assistant replies so the model can avoid
+            // reusing the same opening, wording, or closing phrase. Normal chat passes
+            // an empty list and keeps its original prompt behavior.
+            val recentAssistantReplies = recentHistory.filter { !it.first }.takeLast(5)
+            val repetitionGuard = if (recentAssistantReplies.isEmpty()) "" else {
+                "\n\nAvoid repeating these recent replies or their opening/closing phrases. " +
+                    "Answer the new message with fresh wording and relevant new details:\n" +
+                    recentAssistantReplies.joinToString("\n") { "- " + it.second.take(320) }
+            }
             // Qwen3 defaults to a visible reasoning phase. The /no_think switch
-            // asks the model to produce the character's reply directly, leaving
-            // more of the token budget for the actual conversation.
-            inference.sendUserPrompt("$prompt\n/no_think", predictLength = 1536).collect { token ->
+            // asks the model to produce the character's reply directly.
+            inference.sendUserPrompt("$prompt$repetitionGuard\n/no_think", predictLength = 1536).collect { token ->
                 response.append(token)
             }
 
