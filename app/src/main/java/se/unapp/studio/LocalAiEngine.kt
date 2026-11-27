@@ -26,28 +26,53 @@ class LocalAiEngine(context: Context) {
         initialHistory: List<Pair<Boolean, String>> = emptyList()
     ) {
         mutex.withLock {
-            require(modelFile.isFile) { "AI-modellen hittades inte: ${modelFile.absolutePath}" }
-            val hadActiveSession = activeInstruction != null
+            require(modelFile.isFile && modelFile.canRead()) {
+                "AI-modellen saknas eller kan inte läsas: ${modelFile.absolutePath}"
+            }
+
             loaded = false
             loadedInstruction = null
             activeInstruction = null
-            val readyState = inference.state.first {
+
+            // AiChat exposes one process-wide native engine. It may still be in
+            // an Error state after a failed first load. cleanUp() explicitly
+            // resets that state to Initialized; throwing here made every later
+            // retry fail immediately without attempting recovery.
+            val state = inference.state.first {
                 it is InferenceEngine.State.Initialized ||
                     it is InferenceEngine.State.ModelReady ||
                     it is InferenceEngine.State.Error
             }
-            if (readyState is InferenceEngine.State.Error) {
-                if (hadActiveSession) inference.cleanUp() else throw readyState.exception
-            } else if (readyState is InferenceEngine.State.ModelReady) {
-                inference.cleanUp()
+            when (state) {
+                is InferenceEngine.State.ModelReady,
+                is InferenceEngine.State.Error -> inference.cleanUp()
+                else -> Unit
             }
 
-            inference.loadModel(modelFile.absolutePath)
-            inference.setSystemPrompt(characterInstruction)
-            inference.setConversationHistory(initialHistory.takeLast(CHAT_HISTORY_MESSAGE_LIMIT))
-            loadedInstruction = characterInstruction
-            activeInstruction = characterInstruction
-            loaded = true
+            check(inference.state.value is InferenceEngine.State.Initialized) {
+                "AI-motorn kunde inte återställas. Aktuellt läge: ${inference.state.value.javaClass.simpleName}"
+            }
+
+            try {
+                inference.loadModel(modelFile.absolutePath)
+                inference.setSystemPrompt(characterInstruction)
+                inference.setConversationHistory(initialHistory.takeLast(CHAT_HISTORY_MESSAGE_LIMIT))
+                loadedInstruction = characterInstruction
+                activeInstruction = characterInstruction
+                loaded = true
+            } catch (error: Throwable) {
+                loaded = false
+                loadedInstruction = null
+                activeInstruction = null
+                // Leave the singleton in a retryable state if native loading failed.
+                if (inference.state.value is InferenceEngine.State.Error) {
+                    runCatching { inference.cleanUp() }
+                }
+                throw IllegalStateException(
+                    "Kunde inte starta den lokala AI:n: ${error.message ?: error.javaClass.simpleName}",
+                    error
+                )
+            }
         }
     }
 
@@ -59,8 +84,6 @@ class LocalAiEngine(context: Context) {
                 inference.state.value is InferenceEngine.State.ModelReady) {
                 "AI-sessionen har bytts till en annan chatt. Ladda Testchattens AI igen."
             }
-            // A non-null history means the caller owns the conversation context.
-            // Legacy callers pass null and keep the inference engine's current history.
             if (recentHistory != null) {
                 inference.setConversationHistory(recentHistory.takeLast(CHAT_HISTORY_MESSAGE_LIMIT))
             }
@@ -95,7 +118,6 @@ class LocalAiEngine(context: Context) {
             inference.state.value is InferenceEngine.State.ModelReady
 
     companion object {
-        // AiChat returns one process-wide inference engine. All wrappers must share one lock.
         private val sharedMutex = Mutex()
         @Volatile private var activeInstruction: String? = null
     }
