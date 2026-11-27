@@ -594,7 +594,15 @@ fun TestChatScreen(onClose: () -> Unit) {
                                 append(question)
                             }
                             status = "Letar i historiken och skapar svar offline…"
-                            val answer = withContext(Dispatchers.IO) { ai.ask(prompt, selectedHistory, testChatMode = true) }
+                            val expectedCharacterInstruction = testChatInstruction(selectedCharacter)
+                            val answer = withContext(Dispatchers.IO) {
+                                ai.ask(
+                                    prompt,
+                                    selectedHistory,
+                                    testChatMode = true,
+                                    expectedSystemInstruction = expectedCharacterInstruction
+                                )
+                            }
                             val reply = TestChatLine(
                                 fromUser = false,
                                 text = answer,
