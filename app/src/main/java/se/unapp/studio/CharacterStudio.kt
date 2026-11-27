@@ -153,7 +153,7 @@ fun CharacterStudioScreen(onClose: () -> Unit) {
                     ?: error("Profilen har en ogiltig ålder.")
                 val importedCategory = json.optString("category", "Kvinna")
                 require(importedCategory in listOf("Kvinna", "Man", "Barn")) { "Profilen har en okänd karaktärstyp." }
-                require(importedAge > 0 && if (importedCategory == "Barn") importedAge < 18 else importedAge >= 18) {
+                require(importedAge > 0 && ((importedCategory == "Barn" && importedAge < 18) || (importedCategory != "Barn" && importedAge >= 18))) {
                     "Åldern stämmer inte med karaktärstypen."
                 }
                 val imported = UnAppCharacter(
