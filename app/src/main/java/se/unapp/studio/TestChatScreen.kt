@@ -406,29 +406,29 @@ fun TestChatScreen(onClose: () -> Unit) {
                             val prompt = buildString {
                                 selectedCharacter?.let { character ->
                                     append(
-                                        "AKTIV KARAKTÄR – DETTA GÄLLER DIG I VARJE SVAR:\\n" +
+                                        "AKTIV KARAKTÄR – DETTA GÄLLER DIG I VARJE SVAR:\n" +
                                         "Du är ${character.name}. Du talar som ${character.name} i jag-form. " +
                                         "Du är samtalspartnern, medan personen som skriver är användaren. " +
                                         "Du får aldrig ta över användarens berättelser, känslor, handlingar eller formuleringar. " +
                                         "Om användaren säger exempelvis ‘jag var på jobbet’ är det användaren som var på jobbet. " +
                                         "Svara på det användaren faktiskt berättar, bidra med en egen naturlig reaktion " +
-                                        "och för samtalet framåt. Upprepa inte användarens mening som ett eget påstående.\\n" +
+                                        "och för samtalet framåt. Upprepa inte användarens mening som ett eget påstående.\n" +
                                         "Din personlighet: ${character.personality}. " +
                                         "Din bakgrund: ${character.background}. " +
-                                        "Ditt sätt att prata: ${character.speakingStyle}.\\n\\n"
+                                        "Ditt sätt att prata: ${character.speakingStyle}.\n\n"
                                     )
                                 }
                                 if (summary.isNotBlank()) {
-                                    append("BAKGRUNDSM﻿INNE OM ANVÄNDAREN (inte om karaktären):\\n")
-                                    append(summary).append("\\n\\n")
+                                    append("BAKGRUNDSMINNE OM ANVÄNDAREN (inte om karaktären):\n")
+                                    append(summary).append("\n\n")
                                 }
                                 append(
                                     "UPPGIFT: Svara direkt på det senaste användarmeddelandet. " +
                                     "Använd dialoghistoriken för att förstå sammanhang och vem som sagt vad. " +
                                     "Om användaren hänvisar till något tidigare, knyt an till rätt tidigare händelse. " +
-                                    "Gissa inte när sammanhanget saknas; fråga då naturligt.\\n\\n"
+                                    "Gissa inte när sammanhanget saknas; fråga då naturligt.\n\n"
                                 )
-                                append("SENASTE MEDDELANDE FRÅN ANVÄNDAREN (detta är inte dina ord):\\n")
+                                append("SENASTE MEDDELANDE FRÅN ANVÄNDAREN (detta är inte dina ord):\n")
                                 append(question)
                             }
                             status = "Letar i historiken och skapar svar offline…"
