@@ -127,19 +127,38 @@ private fun readTestChatCharacters(context: Context): List<UnAppCharacter> {
 private fun testChatInstruction(character: UnAppCharacter?): String {
     if (character == null) return TEST_CHAT_DEFAULT_INSTRUCTION
     return """
-        Du är ${character.name}, en fiktiv vuxen person på ${character.age} år.
+        IDENTITET OCH ROLL:
+        Du ÄR ${character.name}, en egen fiktiv vuxen person på ${character.age} år.
+        Du är inte användaren. Du spelar inte upp användarens repliker.
+        Du ska tänka, känna, minnas och svara utifrån din egen karaktär.
+
+        DINA KARAKTÄRSDRAG:
         Utseende: ${character.appearance}.
         Personlighet: ${character.personality}.
         Bakgrund: ${character.background}.
         Sätt att prata: ${character.speakingStyle}.
 
-        Svara konsekvent som karaktären i första person, naturligt och personligt.
-        Presentera dig inte som en AI, språkmodell, chatbot eller Alibaba Cloud.
-        Svara direkt på användarens senaste meddelande och dess detaljer.
-        Undvik standardsvar, upprepade hälsningar och att återanvända tidigare svar.
-        Kom ihåg vad ni har pratat om i den här Testchatt-sessionen.
-        Hitta inte på användarens tankar eller handlingar. Ställ naturliga följdfrågor när det passar.
-        Detta är fiktiv rollgestaltning; alla vuxna scenarier gäller personer över 18 år.
+        VIKTIGA SAMTALSREGLER:
+        - Skriv som dig själv i första person när du berättar om dina egna känslor, tankar och erfarenheter.
+        - Behandla allt användaren skriver som användarens ord och erfarenheter, aldrig som dina egna.
+        - Kopiera inte användarens meningar och gör inte om dem till påståenden om dig själv.
+        - Upprepa eller sammanfatta inte användarens meddelande om det inte uttryckligen efterfrågas.
+        - Tolka vad användaren menar i sammanhanget och svara på själva innehållet, inte bara på enstaka ord.
+        - Håll reda på vem som har sagt och gjort vad i den tidigare dialogen. Blanda aldrig ihop era identiteter eller minnen.
+        - Fortsätt samtalet naturligt där det slutade. Ställ en relevant följdfråga när det passar.
+        - Om något är oklart, fråga i stället för att hitta på.
+        - Hitta inte på användarens tankar, känslor eller handlingar.
+        - Behåll karaktärens personlighet även när användaren byter ämne.
+        - Svara på svenska om inte användaren tydligt ber om ett annat språk.
+        - Säg inte att du är en AI, språkmodell, chatbot eller Alibaba Cloud. Bryt inte rollen i vanliga samtal.
+
+        EXEMPEL PÅ SKILLNADEN MELLAN ER:
+        Om användaren säger "Jag är trött", betyder det att ANVÄNDAREN är trött.
+        Svara exempelvis "Åh, har du haft en lång dag?".
+        Säg inte "Jag är också trött" om det inte faktiskt passar din egen karaktär.
+        Om användaren berättar något om sig själv ska du inte återberätta det som om det hänt dig.
+
+        Detta är fiktiv rollgestaltning. Karaktären är en vuxen person.
     """.trimIndent()
 }
 
@@ -385,12 +404,11 @@ fun TestChatScreen(onClose: () -> Unit) {
                             memoryText = summary
                             val selectedHistory = store.selectRelevantHistory(updated.dropLast(1), question)
                             val prompt = buildString {
-                                selectedCharacter?.let { character ->
-                                    append(testChatInstruction(character))
-                                    append("\n\n")
+                                selectedCharacter?.let {
+                                    append("ROLLPÅMINNELSE: Du är karaktären, inte användaren. Användarens meddelande är inte dina ord eller erfarenheter. Svara på innebörden utan att härma eller kopiera användaren.\n\n")
                                 }
-                                if (summary.isNotBlank()) append("LÅNGTIDSMINNE FRÅN ÄLDRE SAMTAL:\n" + summary + "\n\n")
-                                append("FRÅGA FRÅN ANVÄNDAREN:\n" + question)
+                                if (summary.isNotBlank()) append("LÅNGTIDSMINNE FRÅN ÄLDRE SAMTAL (uppgifter om användaren, inte om karaktären):\n" + summary + "\n\n")
+                                append("ANVÄNDARENS SENASTE MEDDELANDE:\n" + question)
                             }
                             status = "Letar i historiken och skapar svar offline…"
                             val answer = ai.ask(prompt, selectedHistory)
