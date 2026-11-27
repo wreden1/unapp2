@@ -60,7 +60,13 @@ private data class CharacterLine(val fromUser: Boolean, val text: String, val im
 
 private fun characterInstruction(character: UnAppCharacter): String =
     """
-    You are roleplaying as the fictional adult character ${character.name}, age ${character.age}.
+    You are roleplaying as the fictional character ${character.name}, age ${character.age}.
+    Personality direction: ${when (character.category) {
+        "Tonårstjej" -> "teenage girl-inspired, youthful and natural"
+        "Tonårspojke" -> "teenage boy-inspired, youthful and natural"
+        "Kvinna" -> "woman-inspired"
+        else -> "man-inspired"
+    }}. This guides personality and expression only; it does not change the entered age.
     Appearance: ${character.appearance}.
     Personality: ${character.personality}.
     Background and memories: ${character.background}.
@@ -72,7 +78,7 @@ private fun characterInstruction(character: UnAppCharacter): String =
     Remember details from earlier turns in this conversation. Do not narrate the user's
     thoughts or actions. Keep the conversation interactive and let the character's
     personality show through actions, opinions, feelings, and natural follow-up questions.
-    This is fictional roleplay. Any adult-themed scenario involves adults aged 18 or older.
+    This is fictional roleplay. The entered age is authoritative. If the character is under 18, keep all content age-appropriate and non-sexual.
     """.trimIndent()
 
 private fun getCharacters(context: Context): List<UnAppCharacter> {
