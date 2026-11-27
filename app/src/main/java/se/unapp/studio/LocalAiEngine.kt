@@ -151,7 +151,7 @@ class LocalAiEngine(context: Context) {
                     "Ditt senaste svar blev identiskt med ett tidigare svar."
                 }
                 visibleReply = generateReply(
-                    "$prompt\\n\\nVIKTIGT: $reason Börja på ett helt nytt sätt. " +
+                    "$prompt\n\nVIKTIGT: $reason Börja på ett helt nytt sätt. " +
                         "Använd inte samma inledning, fras eller meningsbyggnad som i dina tidigare svar. " +
                         "Bemöt användarens senaste meddelande konkret och naturligt."
                 )
