@@ -532,10 +532,10 @@ fun TestChatScreen(onClose: () -> Unit) {
                             val answer = ai.ask(prompt, selectedHistory)
                             val reply = TestChatLine(false, answer)
                             withContext(Dispatchers.IO) { store.append(reply) }
-                            val activeBackupUri = backupUriText
-                            if (!activeBackupUri.isNullOrBlank()) {
+                            val replyBackupUri = backupUriText
+                            if (!replyBackupUri.isNullOrBlank()) {
                                 val backupResult = runCatching {
-                                    withContext(Dispatchers.IO) { store.writeExternalBackup(Uri.parse(activeBackupUri)) }
+                                    withContext(Dispatchers.IO) { store.writeExternalBackup(Uri.parse(replyBackupUri)) }
                                 }
                                 if (backupResult.isSuccess) backupStatus = "Extern säkerhetskopia uppdaterad."
                                 else backupStatus = "Intern historik sparad; extern backup misslyckades."
