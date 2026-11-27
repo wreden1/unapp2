@@ -14,6 +14,7 @@ on:
   pull_request:
     branches:
       - main
+      - feature/testchatt-long-term-memory
       - feature/character-studio
       - feature/appforge-visual-shell-preview
       - fix/expand-chat-history
