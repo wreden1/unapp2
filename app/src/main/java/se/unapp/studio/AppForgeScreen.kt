@@ -123,7 +123,7 @@ fun AppForgeScreen(
                         Text("Visa en visuell modell av appen medan du beskriver den.", color = ForgeMuted, fontSize = 12.sp)
                     }
                 }
-                if (previewEnabled) {
+                if (previewEnabled && buttonsEnabled && !writeInstead) {
                     ForgeField("VAD VILL DU SE I FÖRHANDSVISNINGEN?", previewInstructions, { previewInstructions = it }, "Beskriv exempelvis startsidan, färger och knappar...")
                     Button(
                         onClick = {
