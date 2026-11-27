@@ -121,6 +121,7 @@ fun TestChatScreen(onClose: () -> Unit) {
     var aiReady by remember { mutableStateOf(false) }
     var loadError by remember { mutableStateOf("") }
     var downloadProgress by remember { mutableStateOf<ModelDownloadProgress?>(null) }
+    var downloadStage by remember { mutableStateOf("") }
     var loadAttempt by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(store) {
@@ -141,7 +142,10 @@ fun TestChatScreen(onClose: () -> Unit) {
                 status = "Laddar ner AI-modellen…"
                 modelFile = ModelDownloader.download(
                     context,
-                    onDetailedProgress = { progress -> downloadProgress = progress }
+                    onDetailedProgress = { progress ->
+                        downloadProgress = progress
+                        downloadStage = progress.stage
+                    }
                 )
             } else {
                 status = "AI-modellen finns. Kontrollerar och startar…"
@@ -206,10 +210,15 @@ fun TestChatScreen(onClose: () -> Unit) {
             if (downloadProgress != null) {
                 val progress = downloadProgress!!
                 val percent = progress.percent
-                LinearProgressIndicator(
-                    progress = { (percent ?: 0).coerceIn(0, 100) / 100f },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                if (percent != null) {
+                    LinearProgressIndicator(
+                        progress = { percent.coerceIn(0, 100) / 100f },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                } else {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
+                Text(downloadStage, color = TCMuted, fontSize = 10.sp)
                 Text(
                     if (percent != null && progress.totalBytes > 0) {
                         "$percent% · ${formatModelBytes(progress.downloadedBytes)} av ${formatModelBytes(progress.totalBytes)}"
