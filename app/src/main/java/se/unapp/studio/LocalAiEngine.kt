@@ -76,7 +76,11 @@ class LocalAiEngine(context: Context) {
         }
     }
 
-    suspend fun ask(prompt: String, recentHistory: List<Pair<Boolean, String>>? = null): String {
+    suspend fun ask(
+        prompt: String,
+        recentHistory: List<Pair<Boolean, String>>? = null,
+        testChatMode: Boolean = false
+    ): String {
         require(prompt.isNotBlank()) { "Skriv en fråga först." }
         return mutex.withLock {
             check(loaded && loadedInstruction != null &&
@@ -85,17 +89,44 @@ class LocalAiEngine(context: Context) {
                 "AI-sessionen har bytts till en annan chatt. Ladda Testchattens AI igen."
             }
             if (recentHistory != null) {
-                inference.setConversationHistory(recentHistory.takeLast(CHAT_HISTORY_MESSAGE_LIMIT))
+                inference.setConversationHistory(
+                    recentHistory.takeLast(CHAT_HISTORY_MESSAGE_LIMIT),
+                    resetSampler = testChatMode
+                )
             }
-            val response = StringBuilder()
-            inference.sendUserPrompt("$prompt\n/no_think", predictLength = 1536).collect { token ->
-                response.append(token)
+            suspend fun generateReply(input: String): String {
+                val response = StringBuilder()
+                inference.sendUserPrompt("$input\n/no_think", predictLength = 1536).collect { token ->
+                    response.append(token)
+                }
+                return response.toString()
+                    .replace(Regex("(?s)<think>.*?</think>"), "")
+                    .substringBefore("<think>")
+                    .replace("</think>", "")
+                    .trim()
             }
-            val visibleReply = response.toString()
-                .replace(Regex("(?s)<think>.*?</think>"), "")
-                .substringBefore("<think>")
-                .replace("</think>", "")
-                .trim()
+
+            var visibleReply = generateReply(prompt)
+            val previousAssistantReply = recentHistory?.lastOrNull { !it.first }?.second?.trim()
+            fun normalizeReply(value: String): String =
+                value.lowercase().replace(Regex("\\s+"), " ").trim()
+
+            // Testchat-only recovery: if the model repeats its immediately previous
+            // answer verbatim, rebuild the context and make one fresh attempt.
+            if (testChatMode && visibleReply.isNotBlank() &&
+                !previousAssistantReply.isNullOrBlank() &&
+                normalizeReply(visibleReply) == normalizeReply(previousAssistantReply)
+            ) {
+                inference.setConversationHistory(
+                    recentHistory!!.takeLast(CHAT_HISTORY_MESSAGE_LIMIT),
+                    resetSampler = true
+                )
+                visibleReply = generateReply(
+                    "$prompt\n\nVIKTIGT: Ditt senaste svar blev identiskt med ditt förra svar. " +
+                        "Skriv nu ett tydligt annorlunda svar som bemöter användarens senaste meddelande. " +
+                        "Återanvänd inte den förra formuleringen."
+                )
+            }
             visibleReply.ifBlank { "Jag fick inget tydligt svar den här gången. Försök igen." }
         }
     }
