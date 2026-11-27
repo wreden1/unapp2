@@ -56,22 +56,42 @@ data class UnAppCharacter(
 )
 private data class CharacterLine(val fromUser: Boolean, val text: String)
 
-private fun characterInstruction(character: UnAppCharacter): String =
-    """
-    You are roleplaying as the fictional adult character ${character.name}, age ${character.age}.
-    Appearance: ${character.appearance}.
-    Personality: ${character.personality}.
-    Background and memories: ${character.background}.
-    Speaking style: ${character.speakingStyle}.
+private fun characterInstruction(character: UnAppCharacter, testMode: Boolean = false): String {
+    val age = character.age.toIntOrNull() ?: 0
+    val ageRule = if (age >= 18) {
+        "The character is an adult. Keep all participants in adult-themed scenarios 18 or older."
+    } else {
+        "The character is under 18. Keep all interactions age-appropriate; do not enter adult or sexual scenarios."
+    }
+    val testInstructions = if (testMode) """
+        EXPERIMENTAL TESTCHAT MODE:
+        - You are the character, not an assistant describing or imitating the user.
+        - Never repeat the user's sentence as if it were your own words.
+        - Do not start every reply with the same greeting, name, or stock phrase.
+        - Avoid reusing wording, metaphors, questions, and endings from your recent replies.
+        - Respond to the actual latest message; carry forward relevant clues, objects, decisions, and game rules.
+        - In games and roleplay, actively participate as the character, take turns, remember clues,
+          and do not reveal a mystery's answer before the user has had a chance to solve it.
+        - If the user proposes a harmless game, accept and help establish its rules naturally.
+        - If something is unclear, ask one focused question instead of restarting the scene.
+        - Vary sentence length and phrasing; be specific rather than generic.
+    """.trimIndent() else ""
+    return """
+        You are roleplaying as the fictional character ${character.name}, age ${character.age}.
+        Appearance: ${character.appearance}.
+        Personality: ${character.personality}.
+        Background and memories: ${character.background}.
+        Speaking style: ${character.speakingStyle}.
+        $ageRule
 
-    Stay in character and speak naturally in first person. Respond directly to the user's
-    latest message and its specific details. Do not reuse a fixed greeting, canned response,
-    or repeat previous answers. Make each reply meaningfully different and relevant.
-    Remember details from earlier turns in this conversation. Do not narrate the user's
-    thoughts or actions. Keep the conversation interactive and let the character's
-    personality show through actions, opinions, feelings, and natural follow-up questions.
-    This is fictional roleplay. Any adult-themed scenario involves adults aged 18 or older.
+        Stay in character and speak naturally in first person. Respond directly to the user's
+        latest message and its specific details. Do not reuse a fixed greeting or canned response.
+        Remember details from earlier turns. Do not narrate the user's thoughts or actions.
+        Keep the conversation interactive and let the character's personality show through
+        actions, opinions, feelings, and natural follow-up questions.
+        $testInstructions
     """.trimIndent()
+}
 
 private fun getCharacters(context: Context): List<UnAppCharacter> {
     val raw = context.getSharedPreferences(CSPrefs, Context.MODE_PRIVATE).getString("characters", "[]") ?: "[]"
@@ -95,17 +115,17 @@ private fun putCharacters(context: Context, list: List<UnAppCharacter>) {
     }
     context.getSharedPreferences(CSPrefs, Context.MODE_PRIVATE).edit().putString("characters", a.toString()).apply()
 }
-private fun getChat(context: Context, id: String): List<CharacterLine> {
-    val raw = context.getSharedPreferences(CSPrefs, Context.MODE_PRIVATE).getString("chat_" + id, "[]") ?: "[]"
+private fun getChat(context: Context, id: String, keyPrefix: String = "chat_"): List<CharacterLine> {
+    val raw = context.getSharedPreferences(CSPrefs, Context.MODE_PRIVATE).getString(keyPrefix + id, "[]") ?: "[]"
     return try {
         val a = JSONArray(raw)
         List(a.length()) { i -> val o = a.getJSONObject(i); CharacterLine(o.optBoolean("fromUser"), o.optString("text")) }
     } catch (_: Exception) { emptyList() }
 }
-private fun putChat(context: Context, id: String, lines: List<CharacterLine>) {
+private fun putChat(context: Context, id: String, lines: List<CharacterLine>, keyPrefix: String = "chat_") {
     val a = JSONArray()
     lines.forEach { a.put(JSONObject().put("fromUser", it.fromUser).put("text", it.text)) }
-    context.getSharedPreferences(CSPrefs, Context.MODE_PRIVATE).edit().putString("chat_" + id, a.toString()).apply()
+    context.getSharedPreferences(CSPrefs, Context.MODE_PRIVATE).edit().putString(keyPrefix + id, a.toString()).apply()
 }
 
 @Composable
@@ -114,6 +134,7 @@ fun CharacterStudioScreen(onClose: () -> Unit) {
     var characters by remember { mutableStateOf(getCharacters(context)) }
     var editing by remember { mutableStateOf(false) }
     var active by remember { mutableStateOf<UnAppCharacter?>(null) }
+    var testMode by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().background(CSInk).padding(18.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = { if (active != null) active = null else if (editing) editing = false else onClose() }) {
@@ -124,7 +145,7 @@ fun CharacterStudioScreen(onClose: () -> Unit) {
         }
         Spacer(Modifier.height(10.dp))
         when {
-            active != null -> CharacterConversation(active!!, onBack = { active = null })
+            active != null -> CharacterConversation(active!!, onBack = { active = null; testMode = false }, testMode = testMode)
             editing -> CharacterForm(
                 existing = active,
                 onCancel = { editing = false; active = null },
@@ -155,9 +176,12 @@ fun CharacterStudioScreen(onClose: () -> Unit) {
                                     }
                                 }
                                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Button(onClick = { active = c }, modifier = Modifier.weight(1f)) { Text("Chat") }
+                                    Button(onClick = { testMode = false; active = c }, modifier = Modifier.weight(1f)) { Text("Chat") }
                                     OutlinedButton(onClick = { active = c; editing = true }) { Text("Edit") }
                                     OutlinedButton(onClick = { characters = characters.filterNot { it.id == c.id }; putCharacters(context, characters) }) { Text("Delete") }
+                                }
+                                OutlinedButton(onClick = { testMode = true; active = c }, modifier = Modifier.fillMaxWidth()) {
+                                    Text("Open isolated Testchat")
                                 }
                             }
                         }
@@ -219,11 +243,12 @@ private fun CharacterForm(existing: UnAppCharacter?, onCancel: () -> Unit, onSav
 }
 
 @Composable
-private fun CharacterConversation(character: UnAppCharacter, onBack: () -> Unit) {
+private fun CharacterConversation(character: UnAppCharacter, onBack: () -> Unit, testMode: Boolean = false) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val ai = remember { LocalAiEngine(context) }
-    var lines by remember(character.id) { mutableStateOf(getChat(context, character.id)) }
+    val chatKeyPrefix = if (testMode) "testchat_" else "chat_"
+    var lines by remember(character.id, testMode) { mutableStateOf(getChat(context, character.id, chatKeyPrefix)) }
     var draft by remember { mutableStateOf("") }
     var status by remember { mutableStateOf("Chat history is stored locally.") }
     var busy by remember { mutableStateOf(false) }
@@ -246,7 +271,7 @@ private fun CharacterConversation(character: UnAppCharacter, onBack: () -> Unit)
             Spacer(Modifier.width(9.dp))
             Column(Modifier.weight(1f)) {
                 Text(character.name, color = Color.White, fontWeight = FontWeight.Bold)
-                Text("Private character conversation", color = CSMuted, fontSize = 10.sp)
+                Text(if (testMode) "TESTCHAT • separate history" else "Private character conversation", color = CSMuted, fontSize = 10.sp)
             }
             TextButton(onClick = onBack) { Text("Back", color = CSAccent) }
         }
@@ -260,7 +285,7 @@ private fun CharacterConversation(character: UnAppCharacter, onBack: () -> Unit)
                     scope.launch {
                         try {
                             ModelDownloader.download(context) { progress = it }
-                            ai.loadModel(model, characterInstruction(character), lines.takeLast(12).map { it.fromUser to it.text })
+                            ai.loadModel(model, characterInstruction(character, testMode), lines.takeLast(20).map { it.fromUser to it.text })
                             status = "Offline AI ready (" + ai.activeBackend + ")."
                         } catch (e: Exception) { status = e.message ?: "Download failed." }
                         finally { busy = false }
@@ -271,7 +296,7 @@ private fun CharacterConversation(character: UnAppCharacter, onBack: () -> Unit)
             OutlinedButton(onClick = {
                 busy = true
                 scope.launch {
-                    try { ai.loadModel(model, characterInstruction(character), lines.takeLast(12).map { it.fromUser to it.text }); status = "Offline AI ready." }
+                    try { ai.loadModel(model, characterInstruction(character, testMode), lines.takeLast(20).map { it.fromUser to it.text }); status = "Offline AI ready." }
                     catch (e: Exception) { status = e.message ?: e.javaClass.simpleName }
                     finally { busy = false }
                 }
@@ -318,21 +343,22 @@ private fun CharacterConversation(character: UnAppCharacter, onBack: () -> Unit)
                 if (message.isNotEmpty() && !busy) {
                     val updated = lines + CharacterLine(true, message)
                     lines = updated
-                    putChat(context, character.id, updated)
+                    putChat(context, character.id, updated, chatKeyPrefix)
                     draft = ""
                     busy = true
                     scope.launch {
                         try {
                             if (!ai.isLoaded()) {
                                 check(model.exists()) { "Download the offline AI model first." }
-                                ai.loadModel(model, characterInstruction(character), updated.dropLast(1).takeLast(12).map { it.fromUser to it.text })
+                                ai.loadModel(model, characterInstruction(character, testMode), updated.dropLast(1).takeLast(20).map { it.fromUser to it.text })
                                 status = "AI loaded (" + ai.activeBackend + ")."
                             }
                             // LiteRT-LM keeps the complete turn history in its active conversation.
-                            val answer = ai.ask(message)
+                            val recentReplies = if (testMode) updated.filter { !it.fromUser }.takeLast(5).map { false to it.text } else emptyList()
+                            val answer = ai.ask(message, recentReplies)
                             val completedTranscript = updated + CharacterLine(false, answer)
                             lines = completedTranscript
-                            putChat(context, character.id, completedTranscript)
+                            putChat(context, character.id, completedTranscript, chatKeyPrefix)
                             status = "Reply generated on this phone."
                         } catch (e: Exception) { status = e.message ?: e.javaClass.simpleName }
                         finally { busy = false }
