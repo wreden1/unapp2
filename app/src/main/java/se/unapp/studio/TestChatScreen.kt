@@ -551,7 +551,7 @@ fun TestChatScreen(onClose: () -> Unit) {
                                 append(question)
                             }
                             status = "Letar i historiken och skapar svar offline…"
-                            val answer = withContext(Dispatchers.IO) { ai.ask(prompt, selectedHistory) }
+                            val answer = withContext(Dispatchers.IO) { ai.ask(prompt, selectedHistory, testChatMode = true) }
                             val reply = TestChatLine(false, answer)
                             withContext(Dispatchers.IO) { store.append(reply) }
                             val replyBackupUri = backupUriText
