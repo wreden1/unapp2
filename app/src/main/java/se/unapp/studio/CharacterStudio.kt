@@ -247,8 +247,8 @@ private fun CharacterForm(existing: UnAppCharacter?, onCancel: () -> Unit, onSav
             picture = uri.toString()
         }
     }
-    Text(if (existing == null) "Create your character" else "Edit your character", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-    Text("Describe the character in your own words.", color = CSMuted, fontSize = 12.sp)
+    Text(if (existing == null) "Skapa karaktär" else "Redigera karaktär", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+    Text("Beskriv karaktären med egna ord.", color = CSMuted, fontSize = 12.sp)
     Spacer(Modifier.height(10.dp))
     LazyColumn(Modifier.fillMaxHeight(0.72f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
@@ -256,14 +256,14 @@ private fun CharacterForm(existing: UnAppCharacter?, onCancel: () -> Unit, onSav
                 CharacterPicture(picture, Modifier.size(72.dp))
                 Spacer(Modifier.width(12.dp))
                 Column {
-                    Text("Character picture", color = Color.White, fontWeight = FontWeight.SemiBold)
-                    Text("Choose your own photo.", color = CSMuted, fontSize = 11.sp)
-                    TextButton(onClick = { picker.launch(arrayOf("image/*")) }) { Text("Choose picture") }
+                    Text("Karaktärsbild", color = Color.White, fontWeight = FontWeight.SemiBold)
+                    Text("Välj en egen bild.", color = CSMuted, fontSize = 11.sp)
+                    TextButton(onClick = { picker.launch(arrayOf("image/*")) }) { Text("Välj bild") }
                 }
             }
         }
-        item { CSField("Name", name, { name = it }, "Character name") }
-        item { CSField("Age", age, { age = it }, "25") }
+        item { CSField("Namn", name, { name = it }, "Karaktärens namn") }
+        item { CSField("Ålder", age, { age = it }, "25") }
         item {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text("Karaktärstyp", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
@@ -282,20 +282,20 @@ private fun CharacterForm(existing: UnAppCharacter?, onCancel: () -> Unit, onSav
                 Text("Välj en typ. Endast ett alternativ kan vara markerat.", color = CSMuted, fontSize = 10.sp)
             }
         }
-        item { CSField("Appearance", appearance, { appearance = it }, "Hair, eyes, clothing, style...") }
-        item { CSField("Personality", personality, { personality = it }, "Confident, caring, funny...") }
-        item { CSField("Background", history, { history = it }, "History, goals, memories...") }
-        item { CSField("Speaking style", voice, { voice = it }, "Warm, sarcastic, poetic...") }
-        item { Text("Adult-themed roleplay must involve adults aged 18 or older.", color = CSMuted, fontSize = 11.sp) }
+        item { CSField("Utseende", appearance, { appearance = it }, "Hår, ögon, kläder, stil...") }
+        item { CSField("Personlighet", personality, { personality = it }, "Självsäker, omtänksam, rolig...") }
+        item { CSField("Bakgrund", history, { history = it }, "Historia, mål, minnen...") }
+        item { CSField("Sätt att prata", voice, { voice = it }, "Varm, sarkastisk, poetisk...") }
+        item { Text("Vuxna karaktärer måste vara minst 18 år. Barnprofiler hålls barnanpassade.", color = CSMuted, fontSize = 11.sp) }
     }
     Spacer(Modifier.height(8.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text("Cancel") }
+        OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text("Avbryt") }
         Button(
-            onClick = { val n = age.toIntOrNull(); if (name.isNotBlank() && n != null && n > 0) onSave(UnAppCharacter(id = existing?.id ?: UUID.randomUUID().toString(), name = name.trim(), age = n.toString(), appearance = appearance, personality = personality, background = history, speakingStyle = voice, imageUri = picture, category = category)) },
-            enabled = name.isNotBlank() && (age.toIntOrNull() ?: 0) > 0,
+            onClick = { val n = age.toIntOrNull(); if (name.isNotBlank() && n != null && n > 0 && ((category == "Barn" && n < 18) || (category != "Barn" && n >= 18))) onSave(UnAppCharacter(id = existing?.id ?: UUID.randomUUID().toString(), name = name.trim(), age = n.toString(), appearance = appearance, personality = personality, background = history, speakingStyle = voice, imageUri = picture, category = category)) },
+            enabled = name.isNotBlank() && (age.toIntOrNull()?.let { it > 0 && if (category == "Barn") it < 18 else it >= 18 } == true),
             modifier = Modifier.weight(1f)
-        ) { Text("Save character") }
+        ) { Text("Spara profil") }
     }
 }
 
