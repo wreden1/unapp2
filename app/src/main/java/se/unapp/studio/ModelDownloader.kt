@@ -47,10 +47,13 @@ object ModelDownloader {
         val destination = File(directory, MODEL_NAME)
         val temporary = File(directory, "$MODEL_NAME.part")
 
-        if (destination.isFile && sha256(destination) == EXPECTED_SHA256) {
-            onProgress(100)
-            onDetailedProgress(ModelDownloadProgress(destination.length(), destination.length(), 100, "Modellen är klar"))
-            return@withContext destination
+        if (destination.isFile) {
+            onDetailedProgress(ModelDownloadProgress(destination.length(), destination.length(), null, "Kontrollerar befintlig modellfil…"))
+            if (sha256(destination) == EXPECTED_SHA256) {
+                onProgress(100)
+                onDetailedProgress(ModelDownloadProgress(destination.length(), destination.length(), 100, "Modellen är redan nedladdad"))
+                return@withContext destination
+            }
         }
 
         File(directory, LEGACY_MODEL_NAME).delete()
