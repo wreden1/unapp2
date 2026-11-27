@@ -149,15 +149,22 @@ fun CharacterStudioScreen(onClose: () -> Unit) {
                     ?: error("Kunde inte läsa profilfilen.")
                 val json = JSONObject(raw)
                 require(json.optString("format") == "unapp-character-profile") { "Filen är inte en UnApp-karaktärsprofil." }
+                val importedAge = json.optString("age", "25").toIntOrNull()
+                    ?: error("Profilen har en ogiltig ålder.")
+                val importedCategory = json.optString("category", "Kvinna")
+                require(importedCategory in listOf("Kvinna", "Man", "Barn")) { "Profilen har en okänd karaktärstyp." }
+                require(importedAge > 0 && if (importedCategory == "Barn") importedAge < 18 else importedAge >= 18) {
+                    "Åldern stämmer inte med karaktärstypen."
+                }
                 val imported = UnAppCharacter(
                     id = UUID.randomUUID().toString(),
                     name = json.optString("name"),
-                    age = json.optString("age", "25"),
+                    age = importedAge.toString(),
                     appearance = json.optString("appearance"),
                     personality = json.optString("personality"),
                     background = json.optString("background"),
                     speakingStyle = json.optString("speakingStyle"),
-                    category = json.optString("category", "Kvinna")
+                    category = importedCategory
                 )
                 require(imported.name.isNotBlank()) { "Profilen saknar namn." }
                 characters = characters + imported
