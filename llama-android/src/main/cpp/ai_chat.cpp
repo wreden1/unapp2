@@ -422,13 +422,18 @@ Java_com_arm_aichat_internal_InferenceEngineImpl_processSystemPrompt(
 extern "C"
 JNIEXPORT jint JNICALL
 Java_com_arm_aichat_internal_InferenceEngineImpl_processConversationHistory(
-        JNIEnv *env, jobject /*unused*/, jobjectArray jhistory
+        JNIEnv *env, jobject /*unused*/, jobjectArray jhistory, jboolean reset_sampler
 ) {
     const bool has_chat_template = common_chat_templates_was_explicit(g_chat_templates.get());
     const jsize count = env->GetArrayLength(jhistory);
     if (count % 2 != 0) return 1;
 
     // Rebuild the selected context from the system prompt on every restore.
+    // Testchat can opt into resetting sampler repetition state between turns;
+    // other chat modes retain their existing sampling behavior.
+    if (reset_sampler == JNI_TRUE && g_sampler != nullptr) {
+        common_sampler_reset(g_sampler);
+    }
     // Without this reset, each turn appends the same history again and causes
     // duplicated messages, context growth, and increasingly repetitive replies.
     llama_memory_seq_rm(llama_get_memory(g_context), 0, system_prompt_position, current_position);
