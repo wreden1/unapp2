@@ -409,7 +409,7 @@ fun TestChatScreen(onClose: () -> Unit) {
                                 selectedCharacter?.let { character ->
                                     append(
                                         "AKTIV KARAKTÄR – DETTA GÄLLER DIG I VARJE SVAR:\n" +
-                                        "Du är ${character.name}, en fiktiv ${character.category.toLowerCase()} på ${character.age} år. Du talar som ${character.name} i jag-form. " +
+                                        "Du är ${character.name}, en fiktiv ${character.category.lowercase()} på ${character.age} år. Du talar som ${character.name} i jag-form. " +
                                         (if (character.category == "Barn") "Håll samtalet barnanpassat och undvik romantiskt eller sexuellt innehåll. " else "Du är en vuxen karaktär. ") +
                                         "Du är samtalspartnern, medan personen som skriver är användaren. " +
                                         "Du får aldrig ta över användarens berättelser, känslor, handlingar eller formuleringar. " +
