@@ -66,3 +66,5 @@ jobs:
 # Rebuild Testchatt after character-prompt update.
 
 # Rebuild after Testchatt-only character prompt fix.
+
+# Rebuild Testchatt after clearer character identity and speaker separation.
