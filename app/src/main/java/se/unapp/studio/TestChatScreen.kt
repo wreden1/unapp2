@@ -1,6 +1,10 @@
 package se.unapp.studio
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -22,6 +26,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
+import java.io.FileOutputStream
 
 private val TCInk = Color(0xFF0B1020)
 private val TCPanel = Color(0xFF151D32)
@@ -31,6 +36,7 @@ private val TCMuted = Color(0xFFAAB4CC)
 private data class TestChatLine(val fromUser: Boolean, val text: String, val timestamp: Long = System.currentTimeMillis())
 
 private class TestChatMemoryStore(context: Context) {
+    private val appContext = context.applicationContext
     private val directory = File(context.filesDir, "testchatt")
     private val transcript = File(directory, "conversation.jsonl")
     private val summaryFile = File(directory, "long_term_memory.txt")
@@ -47,10 +53,34 @@ private class TestChatMemoryStore(context: Context) {
 
     fun append(line: TestChatLine) {
         check(directory.exists() || directory.mkdirs()) { "Kunde inte skapa Testchattens minnesmapp." }
-        transcript.appendText(JSONObject()
+        val row = JSONObject()
             .put("fromUser", line.fromUser)
             .put("text", line.text)
-            .put("timestamp", line.timestamp).toString() + "\n")
+            .put("timestamp", line.timestamp).toString() + "\n"
+        FileOutputStream(transcript, true).use { output ->
+            output.write(row.toByteArray(Charsets.UTF_8))
+            output.fd.sync()
+        }
+    }
+
+    fun writeExternalBackup(uri: Uri) {
+        val content = buildString {
+            append("UNAPP CHATT – KONVERSATIONSHISTORIK\n")
+            append("Säkerhetskopia. Meddelanden sparas automatiskt.\n")
+            append("========================================\n\n")
+            read().forEach { line ->
+                append(if (line.fromUser) "ANVÄNDAREN" else "CHATBOTEN")
+                append(" · ")
+                append(java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
+                    .format(java.util.Date(line.timestamp)))
+                append("\n")
+                append(line.text)
+                append("\n\n")
+            }
+        }
+        val output = appContext.contentResolver.openOutputStream(uri, "wt")
+            ?: error("Kunde inte öppna den externa textfilen.")
+        output.bufferedWriter(Charsets.UTF_8).use { it.write(content) }
     }
 
     fun updateLongTermSummary(lines: List<TestChatLine>): String {
@@ -196,6 +226,28 @@ fun TestChatScreen(onClose: () -> Unit) {
     var downloadProgress by remember { mutableStateOf<ModelDownloadProgress?>(null) }
     var downloadStage by remember { mutableStateOf("") }
     var loadAttempt by remember { mutableIntStateOf(0) }
+    val backupPreferences = remember { context.getSharedPreferences("testchat_external_backup", Context.MODE_PRIVATE) }
+    var backupUriText by remember { mutableStateOf(backupPreferences.getString("transcript_uri", null)) }
+    var backupStatus by remember { mutableStateOf(if (backupUriText.isNullOrBlank()) "Ingen extern textfil vald ännu." else "Extern textfil är ansluten.") }
+    val backupPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            }
+            backupUriText = uri.toString()
+            backupPreferences.edit().putString("transcript_uri", uri.toString()).apply()
+            backupStatus = "Textfil vald. Sparar konversationen…"
+            scope.launch {
+                val result = runCatching { withContext(Dispatchers.IO) { store.writeExternalBackup(uri) } }
+                backupStatus = result.fold(
+                    { "Extern säkerhetskopia uppdaterad." },
+                    { "Extern backup kunde inte skrivas: ${it.message ?: "okänt fel"}" }
+                )
+            }
+        }
+    }
     val savedCharacters = remember { readTestChatCharacters(context) }
     var selectedCharacterId by remember {
         mutableStateOf(context.getSharedPreferences(TEST_CHAT_CHARACTER_PREFS, Context.MODE_PRIVATE)
@@ -210,6 +262,16 @@ fun TestChatScreen(onClose: () -> Unit) {
         lines = saved
         memoryText = withContext(Dispatchers.IO) { store.readLongTermSummary() }
         historyLoaded = true
+        val savedUri = backupUriText
+        if (!savedUri.isNullOrBlank()) {
+            val result = runCatching {
+                withContext(Dispatchers.IO) { store.writeExternalBackup(Uri.parse(savedUri)) }
+            }
+            backupStatus = result.fold(
+                { "Extern säkerhetskopia synkroniserad." },
+                { "Intern historik återställd. Extern backup misslyckades: ${it.message ?: "okänt fel"}" }
+            )
+        }
     }
 
     LaunchedEffect(loadAttempt) {
@@ -259,12 +321,21 @@ fun TestChatScreen(onClose: () -> Unit) {
             }) { Text("Stäng", color = TCAccent) }
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             OutlinedButton(onClick = { showMemory = !showMemory }) {
                 Text(if (showMemory) "Dölj minnet" else "Visa minnet")
             }
             Text(lines.size.toString() + " sparade meddelanden", color = TCMuted,
-                modifier = Modifier.align(Alignment.CenterVertically), fontSize = 10.sp)
+                modifier = Modifier.weight(1f), fontSize = 10.sp)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedButton(onClick = {
+                backupPicker.launch("UnApp-konversation.txt")
+            }) {
+                Text(if (backupUriText.isNullOrBlank()) "Välj textfil för backup" else "Byt textfil")
+            }
+            Spacer(Modifier.width(8.dp))
+            Text(backupStatus, color = TCMuted, fontSize = 10.sp, modifier = Modifier.weight(1f))
         }
 
 
@@ -412,6 +483,13 @@ fun TestChatScreen(onClose: () -> Unit) {
                     scope.launch {
                         try {
                             withContext(Dispatchers.IO) { store.append(userLine) }
+                            val activeBackupUri = backupUriText
+                            if (!activeBackupUri.isNullOrBlank()) {
+                                val backupResult = runCatching {
+                                    withContext(Dispatchers.IO) { store.writeExternalBackup(Uri.parse(activeBackupUri)) }
+                                }
+                                if (backupResult.isFailure) backupStatus = "Intern historik sparad; extern backup misslyckades."
+                            }
                             val summary = withContext(Dispatchers.IO) { store.updateLongTermSummary(updated) }
                             memoryText = summary
                             val selectedHistory = store.selectRelevantHistory(updated.dropLast(1), question)
@@ -454,6 +532,14 @@ fun TestChatScreen(onClose: () -> Unit) {
                             val answer = ai.ask(prompt, selectedHistory)
                             val reply = TestChatLine(false, answer)
                             withContext(Dispatchers.IO) { store.append(reply) }
+                            val activeBackupUri = backupUriText
+                            if (!activeBackupUri.isNullOrBlank()) {
+                                val backupResult = runCatching {
+                                    withContext(Dispatchers.IO) { store.writeExternalBackup(Uri.parse(activeBackupUri)) }
+                                }
+                                if (backupResult.isSuccess) backupStatus = "Extern säkerhetskopia uppdaterad."
+                                else backupStatus = "Intern historik sparad; extern backup misslyckades."
+                            }
                             lines = updated + reply
                             status = "AI:n är redo. Hela historiken är sparad lokalt."
                         } catch (error: Throwable) {
