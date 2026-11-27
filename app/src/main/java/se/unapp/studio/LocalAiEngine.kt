@@ -25,7 +25,7 @@ class LocalAiEngine(context: Context) {
         initialHistory: List<Pair<Boolean, String>> = emptyList()
     ) {
         mutex.withLock {
-            require(modelFile.isFile) { "AI-modellen hittades inte: \${modelFile.absolutePath}" }
+            require(modelFile.isFile) { "AI-modellen hittades inte: ${modelFile.absolutePath}" }
             val readyState = inference.state.first {
                 it is InferenceEngine.State.Initialized || it is InferenceEngine.State.Error
             }
