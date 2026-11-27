@@ -159,14 +159,14 @@ fun UnAppScreen() {
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(14.dp)
                     ) {
-                        Text("Öppna chatt – Character Studio")
+                        Text("Karaktärsprofiler – skapa, importera och exportera")
                     }
                     OutlinedButton(
                         onClick = { showTestChat = true },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(14.dp)
                     ) {
-                        Text("Öppna Testchatt – nytt minnessystem")
+                        Text("Öppna UnApp chatt – gemensam chatt")
                     }
                 }
 

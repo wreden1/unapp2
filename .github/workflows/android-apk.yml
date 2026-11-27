@@ -9,9 +9,12 @@ on:
       - feature/llama-cpp-engine
       - feature/offline-image-generation
       - feature/testchatt-long-term-memory
+      - feature/testchat-character-selection
+      - feature/unified-chat-character-profiles
   pull_request:
     branches:
       - main
+      - feature/testchatt-long-term-memory
       - feature/character-studio
       - feature/appforge-visual-shell-preview
       - fix/expand-chat-history
@@ -61,3 +64,13 @@ jobs:
           name: UnApp-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+# Rebuild Testchatt after character-prompt update.
+
+# Rebuild after Testchatt-only character prompt fix.
+
+# Rebuild Testchatt after clearer character identity and speaker separation.
+# Rebuild after character profile Kotlin string interpolation fix.
+# Rebuild after Kotlin lowercase deprecation fix.
+
+# Trigger verification build after Kotlin declaration fix.

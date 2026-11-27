@@ -2,9 +2,11 @@ package se.unapp.studio
 
 import android.content.Context
 import android.os.StatFs
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
@@ -29,6 +31,9 @@ object ModelDownloader {
     private const val LEGACY_MODEL_NAME =
         "Qwen3-1.7B_dynamic_wi4b32_afp32.litertlm"
 
+    private const val EXPECTED_MODEL_BYTES = 1_282_000_000L
+    private const val FREE_SPACE_MARGIN_BYTES = 170_000_000L
+
     fun modelFile(context: Context): File {
         val directory = File(context.filesDir, "models")
         return File(directory, MODEL_NAME)
@@ -41,59 +46,113 @@ object ModelDownloader {
     ): File = withContext(Dispatchers.IO) {
         val directory = File(context.filesDir, "models")
         if (!directory.exists() && !directory.mkdirs()) {
-            error("Kunde inte skapa modellmappen.")
+            error("Kunde inte skapa modellmappen: ${directory.absolutePath}")
         }
 
         val destination = File(directory, MODEL_NAME)
         val temporary = File(directory, "$MODEL_NAME.part")
 
         if (destination.isFile) {
-            onDetailedProgress(ModelDownloadProgress(destination.length(), destination.length(), null, "Kontrollerar befintlig modellfil…"))
+            onDetailedProgress(ModelDownloadProgress(destination.length(), destination.length(), null, "Kontrollerar befintlig AI-modell…"))
             if (sha256(destination) == EXPECTED_SHA256) {
                 onProgress(100)
-                onDetailedProgress(ModelDownloadProgress(destination.length(), destination.length(), 100, "Modellen är redan nedladdad"))
+                onDetailedProgress(ModelDownloadProgress(destination.length(), destination.length(), 100, "AI-modellen är redan installerad"))
                 return@withContext destination
+            }
+            check(destination.delete()) {
+                "Den befintliga AI-modellen är skadad och kunde inte tas bort. Kontrollera ledigt lagringsutrymme."
             }
         }
 
         File(directory, LEGACY_MODEL_NAME).delete()
 
-        val requiredBytes = 1_450_000_000L
-        val availableBytes = StatFs(directory.absolutePath).availableBytes
-        check(availableBytes >= requiredBytes) {
-            "Det behövs cirka 1,45 GB ledigt utrymme för den nya Qwen3-modellen."
+        var downloaded = temporary.length()
+        val requiredFree = (EXPECTED_MODEL_BYTES - downloaded).coerceAtLeast(0L) + FREE_SPACE_MARGIN_BYTES
+        val available = StatFs(directory.absolutePath).availableBytes
+        check(available >= requiredFree) {
+            "För lite ledigt utrymme. Det behövs cirka ${requiredFree / 1_000_000_000.0} GB till för nedladdningen. Frigör utrymme och försök igen."
         }
 
-        val connection = URL(MODEL_URL).openConnection() as HttpURLConnection
+        var connection: HttpURLConnection? = null
         try {
-            connection.connectTimeout = 30000
-            connection.readTimeout = 120000
-            connection.instanceFollowRedirects = true
-            connection.setRequestProperty("User-Agent", "UnApp-Android")
-            connection.connect()
-
-            check(connection.responseCode == HttpURLConnection.HTTP_OK) {
-                "Nedladdningen misslyckades: HTTP ${connection.responseCode}"
+            var activeConnection = (URL(MODEL_URL).openConnection() as HttpURLConnection).apply {
+                connectTimeout = 45_000
+                readTimeout = 180_000
+                instanceFollowRedirects = true
+                useCaches = false
+                setRequestProperty("User-Agent", "UnApp-Android/1.0")
+                setRequestProperty("Accept-Encoding", "identity")
+                if (downloaded > 0L) {
+                    setRequestProperty("Range", "bytes=$downloaded-")
+                }
             }
 
-            val total = connection.contentLengthLong
-            var downloaded = 0L
-            var lastReportedBytes = 0L
-            var lastReportedPercent = -1
-            onDetailedProgress(ModelDownloadProgress(0L, total, if (total > 0) 0 else null, "Laddar ner modellen"))
+            connection = activeConnection
+            activeConnection.connect()
+            var response = activeConnection.responseCode
 
-            connection.inputStream.use { input ->
-                temporary.outputStream().buffered().use { output ->
-                    val buffer = ByteArray(128 * 1024)
+            // Some mirrors ignore Range requests. In that case restart cleanly
+            // instead of appending a full response to the partial file.
+            if (downloaded > 0L && (response == HttpURLConnection.HTTP_OK || response == 416)) {
+                activeConnection.disconnect()
+                temporary.delete()
+                downloaded = 0L
+                activeConnection = (URL(MODEL_URL).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 45_000
+                    readTimeout = 180_000
+                    instanceFollowRedirects = true
+                    useCaches = false
+                    setRequestProperty("User-Agent", "UnApp-Android/1.0")
+                    setRequestProperty("Accept-Encoding", "identity")
+                }
+                connection = activeConnection
+                activeConnection.connect()
+                response = activeConnection.responseCode
+            }
+
+            val expectedResponse = if (downloaded > 0L) HttpURLConnection.HTTP_PARTIAL else HttpURLConnection.HTTP_OK
+            check(response == expectedResponse) {
+                val detail = runCatching { activeConnection.responseMessage }.getOrNull()
+                "Nedladdningen misslyckades: HTTP $response ${detail ?: ""}. Kontrollera internetanslutningen och försök igen."
+            }
+
+            val contentRange = activeConnection.getHeaderField("Content-Range")
+            if (downloaded > 0L) {
+                val rangeStart = Regex("^bytes (\\d+)-").find(contentRange.orEmpty())?.groupValues?.getOrNull(1)?.toLongOrNull()
+                check(rangeStart == downloaded) {
+                    "Servern kunde inte fortsätta nedladdningen från rätt position. Försök igen så startar nedladdningen om."
+                }
+            }
+
+            val responseLength = activeConnection.contentLengthLong
+            val rangeTotal = Regex("/(\\d+)$").find(contentRange.orEmpty())?.groupValues?.getOrNull(1)?.toLongOrNull()
+            val total = rangeTotal ?: if (responseLength > 0L) responseLength + downloaded else -1L
+            var lastReportedBytes = downloaded
+            var lastReportedPercent = -1
+            onDetailedProgress(
+                ModelDownloadProgress(
+                    downloaded,
+                    total,
+                    if (total > 0L) ((downloaded * 100L) / total).toInt().coerceIn(0, 100) else null,
+                    if (downloaded > 0L) "Fortsätter nedladdningen där den avbröts" else "Ansluten. Laddar ner AI-modellen…"
+                )
+            )
+
+            val append = downloaded > 0L
+            activeConnection.inputStream.use { input ->
+                FileOutputStream(temporary, append).buffered().use { output ->
+                    val buffer = ByteArray(256 * 1024)
                     while (true) {
                         val count = input.read(buffer)
                         if (count < 0) break
                         output.write(buffer, 0, count)
                         downloaded += count
-                        val percent = if (total > 0) ((downloaded * 100) / total).toInt().coerceIn(0, 100) else null
+                        val percent = if (total > 0L) ((downloaded * 100L) / total).toInt().coerceIn(0, 100) else null
                         if (percent != null) onProgress(percent)
-                        if ((percent != null && percent != lastReportedPercent) || downloaded - lastReportedBytes >= 4L * 1024L * 1024L) {
-                            onDetailedProgress(ModelDownloadProgress(downloaded, total, percent, "Laddar ner modellen"))
+                        if ((percent != null && percent != lastReportedPercent) ||
+                            downloaded - lastReportedBytes >= 4L * 1024L * 1024L
+                        ) {
+                            onDetailedProgress(ModelDownloadProgress(downloaded, total, percent, "Laddar ner AI-modellen…"))
                             lastReportedBytes = downloaded
                             lastReportedPercent = percent ?: -1
                         }
@@ -101,37 +160,44 @@ object ModelDownloader {
                 }
             }
 
-            check(total <= 0 || downloaded == total) {
-                "Nedladdningen blev ofullständig."
+            check(total <= 0L || downloaded == total) {
+                "Nedladdningen blev ofullständig (${downloaded / 1_000_000} av ${total / 1_000_000} MB). Tryck igen för att fortsätta."
             }
 
-            onDetailedProgress(ModelDownloadProgress(downloaded, total, if (total > 0) 100 else null, "Kontrollerar modellfilen…"))
+            onDetailedProgress(ModelDownloadProgress(downloaded, total, 100, "Kontrollerar AI-modellens fil…"))
             val actualSha256 = sha256(temporary)
-            check(actualSha256 == EXPECTED_SHA256) {
-                "Modellfilens kontrollsumma stämmer inte. SHA-256: $actualSha256"
+            if (actualSha256 != EXPECTED_SHA256) {
+                temporary.delete()
+                error("AI-modellens kontrollsumma stämmer inte. Filen var ofullständig eller skadad och har tagits bort. Försök ladda ner igen.")
             }
 
-            onDetailedProgress(ModelDownloadProgress(downloaded, total, if (total > 0) 100 else null, "Sparar modellfilen…"))
+            onDetailedProgress(ModelDownloadProgress(downloaded, total, 100, "Installerar AI-modellen…"))
             if (destination.exists()) destination.delete()
             check(temporary.renameTo(destination)) {
-                "Kunde inte spara den nya GGUF-modellen."
+                "Nedladdningen lyckades men AI-modellen kunde inte sparas. Kontrollera telefonens lagringsutrymme."
             }
 
             onProgress(100)
-            onDetailedProgress(ModelDownloadProgress(destination.length(), destination.length(), 100, "Modellen är klar"))
+            onDetailedProgress(ModelDownloadProgress(destination.length(), destination.length(), 100, "AI-modellen är installerad och klar"))
             destination
-        } catch (error: Throwable) {
-            temporary.delete()
-            throw error
+        } catch (error: Exception) {
+            if (error is CancellationException) throw error
+            // Keep the .part file after network interruptions so the next
+            // attempt can resume instead of downloading the entire model again.
+            throw IllegalStateException(
+                error.message?.takeIf { it.isNotBlank() }
+                    ?: "Nedladdningen av AI-modellen avbröts. Kontrollera internetanslutningen och försök igen.",
+                error
+            )
         } finally {
-            connection.disconnect()
+            connection?.disconnect()
         }
     }
 
     private fun sha256(file: File): String {
         val digest = MessageDigest.getInstance("SHA-256")
         file.inputStream().buffered().use { input ->
-            val buffer = ByteArray(128 * 1024)
+            val buffer = ByteArray(256 * 1024)
             while (true) {
                 val count = input.read(buffer)
                 if (count < 0) break
