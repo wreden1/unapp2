@@ -76,26 +76,86 @@ class LocalAiEngine(context: Context) {
         }
     }
 
-    suspend fun ask(prompt: String, recentHistory: List<Pair<Boolean, String>>? = null): String {
+    suspend fun ask(
+        prompt: String,
+        recentHistory: List<Pair<Boolean, String>>? = null,
+        testChatMode: Boolean = false,
+        expectedSystemInstruction: String? = null
+    ): String {
         require(prompt.isNotBlank()) { "Skriv en fråga först." }
         return mutex.withLock {
             check(loaded && loadedInstruction != null &&
                 activeInstruction == loadedInstruction &&
+                (expectedSystemInstruction == null || loadedInstruction == expectedSystemInstruction) &&
                 inference.state.value is InferenceEngine.State.ModelReady) {
-                "AI-sessionen har bytts till en annan chatt. Ladda Testchattens AI igen."
+                "Fel karaktärsinstruktion är laddad. Ladda om Testchattens AI för den valda karaktären."
             }
             if (recentHistory != null) {
-                inference.setConversationHistory(recentHistory.takeLast(CHAT_HISTORY_MESSAGE_LIMIT))
+                inference.setConversationHistory(
+                    recentHistory.takeLast(CHAT_HISTORY_MESSAGE_LIMIT),
+                    resetSampler = testChatMode
+                )
             }
-            val response = StringBuilder()
-            inference.sendUserPrompt("$prompt\n/no_think", predictLength = 1536).collect { token ->
-                response.append(token)
+            suspend fun generateReply(input: String): String {
+                val response = StringBuilder()
+                inference.sendUserPrompt("$input\n/no_think", predictLength = 1536).collect { token ->
+                    response.append(token)
+                }
+                return response.toString()
+                    .replace(Regex("(?s)<think>.*?</think>"), "")
+                    .substringBefore("<think>")
+                    .replace("</think>", "")
+                    .trim()
             }
-            val visibleReply = response.toString()
-                .replace(Regex("(?s)<think>.*?</think>"), "")
-                .substringBefore("<think>")
-                .replace("</think>", "")
-                .trim()
+
+            var visibleReply = generateReply(prompt)
+            val previousAssistantReplies = recentHistory.orEmpty()
+                .filter { !it.first }
+                .map { it.second }
+                .takeLast(6)
+
+            fun normalizeReply(value: String): String =
+                value.lowercase().replace(Regex("\\s+"), " ").trim()
+
+            // Compare the opening words as well as the complete answer. This catches
+            // the common failure where every reply starts identically but continues
+            // with slightly different text.
+            fun openingSignature(value: String): String {
+                val words = value.lowercase()
+                    .replace(Regex("[^\\p{L}\\p{N}]+"), " ")
+                    .trim()
+                    .split(Regex("\\s+"))
+                    .filter { it.isNotBlank() }
+                return if (words.size >= 6) words.take(8).joinToString(" ") else ""
+            }
+
+            val currentOpening = openingSignature(visibleReply)
+            val repeatsFullReply = previousAssistantReplies.any {
+                normalizeReply(it) == normalizeReply(visibleReply)
+            }
+            val repeatsOpening = currentOpening.isNotBlank() &&
+                previousAssistantReplies.any { openingSignature(it) == currentOpening }
+
+            // Testchat-only recovery: detect both identical full replies and repeated
+            // openings, then rebuild the exact same history and reset sampler state.
+            if (testChatMode && visibleReply.isNotBlank() &&
+                (repeatsFullReply || repeatsOpening)
+            ) {
+                inference.setConversationHistory(
+                    recentHistory.orEmpty().takeLast(CHAT_HISTORY_MESSAGE_LIMIT),
+                    resetSampler = true
+                )
+                val reason = if (repeatsOpening) {
+                    "Dina första ord upprepades från ett tidigare svar."
+                } else {
+                    "Ditt senaste svar blev identiskt med ett tidigare svar."
+                }
+                visibleReply = generateReply(
+                    "$prompt\n\nVIKTIGT: $reason Börja på ett helt nytt sätt. " +
+                        "Använd inte samma inledning, fras eller meningsbyggnad som i dina tidigare svar. " +
+                        "Bemöt användarens senaste meddelande konkret och naturligt."
+                )
+            }
             visibleReply.ifBlank { "Jag fick inget tydligt svar den här gången. Försök igen." }
         }
     }

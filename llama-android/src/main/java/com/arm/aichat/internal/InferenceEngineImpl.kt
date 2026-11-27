@@ -104,7 +104,7 @@ internal class InferenceEngineImpl private constructor(
     private external fun processUserPrompt(userPrompt: String, predictLength: Int): Int
 
     @FastNative
-    private external fun processConversationHistory(history: Array<String>): Int
+    private external fun processConversationHistory(history: Array<String>, resetSampler: Boolean): Int
 
     @FastNative
     private external fun generateNextToken(): String?
@@ -221,7 +221,7 @@ internal class InferenceEngineImpl private constructor(
     /**
      * Restore saved conversation turns into the native context without regenerating them.
      */
-    override suspend fun setConversationHistory(history: List<Pair<Boolean, String>>) =
+    override suspend fun setConversationHistory(history: List<Pair<Boolean, String>>, resetSampler: Boolean) =
         withContext(llamaDispatcher) {
             check(_state.value is InferenceEngine.State.ModelReady) {
                 "Cannot restore history in ${_state.value.javaClass.simpleName}"
@@ -233,7 +233,7 @@ internal class InferenceEngineImpl private constructor(
             // Call even for an empty list so a new chat cannot inherit another chat's turns.
             _state.value = InferenceEngine.State.ProcessingUserPrompt
             try {
-                val result = processConversationHistory(nativeHistory)
+                val result = processConversationHistory(nativeHistory, resetSampler)
                 check(result == 0) { "Failed to restore conversation history (code $result)" }
             } finally {
                 _state.value = InferenceEngine.State.ModelReady
