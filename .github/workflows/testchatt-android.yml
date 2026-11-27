@@ -1,0 +1,36 @@
+name: Testchatt Android build
+
+on:
+  pull_request:
+    branches:
+      - feature/appforge-visual-shell-preview
+  push:
+    branches:
+      - feature/testchatt-long-term-memory
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  assemble-debug:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android native build tools
+        run: |
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "cmake;3.31.6" "ndk;27.2.12479018"
+
+      - name: Build debug APK
+        run: ./gradlew --no-daemon :app:assembleDebug
