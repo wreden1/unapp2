@@ -229,14 +229,14 @@ internal class InferenceEngineImpl private constructor(
             val nativeHistory = history.flatMap { (fromUser, text) ->
                 listOf(if (fromUser) "user" else "assistant", text)
             }.toTypedArray()
-            if (nativeHistory.isNotEmpty()) {
-                _state.value = InferenceEngine.State.ProcessingUserPrompt
-                try {
-                    val result = processConversationHistory(nativeHistory)
-                    check(result == 0) { "Failed to restore conversation history (code $result)" }
-                } finally {
-                    _state.value = InferenceEngine.State.ModelReady
-                }
+            // The native layer clears the previous turn context before restoring this list.
+            // Call even for an empty list so a new chat cannot inherit another chat's turns.
+            _state.value = InferenceEngine.State.ProcessingUserPrompt
+            try {
+                val result = processConversationHistory(nativeHistory)
+                check(result == 0) { "Failed to restore conversation history (code $result)" }
+            } finally {
+                _state.value = InferenceEngine.State.ModelReady
             }
         }
 
