@@ -137,8 +137,8 @@ fun CharacterStudioScreen(onClose: () -> Unit) {
                     .put("speakingStyle", character.speakingStyle)
                 context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(json.toString(2)) }
                     ?: error("Kunde inte skriva profilfilen.")
-                "Profilen \${character.name} exporterades."
-            }.getOrElse { "Export misslyckades: \${it.message}" }
+                "Profilen ${character.name} exporterades."
+            }.getOrElse { "Export misslyckades: ${it.message}" }
         }
         exportTarget = null
     }
@@ -169,8 +169,8 @@ fun CharacterStudioScreen(onClose: () -> Unit) {
                 require(imported.name.isNotBlank()) { "Profilen saknar namn." }
                 characters = characters + imported
                 putCharacters(context, characters)
-                "Profilen \${imported.name} importerades."
-            }.getOrElse { "Import misslyckades: \${it.message}" }
+                "Profilen ${imported.name} importerades."
+            }.getOrElse { "Import misslyckades: ${it.message}" }
         }
     }
 
@@ -219,13 +219,13 @@ fun CharacterStudioScreen(onClose: () -> Unit) {
                                     Spacer(Modifier.width(12.dp))
                                     Column(Modifier.weight(1f)) {
                                         Text(character.name, color = Color.White, fontWeight = FontWeight.Bold)
-                                        Text("\${character.category} · \${character.age} år", color = CSMuted, fontSize = 11.sp)
+                                        Text("${character.category} · ${character.age} år", color = CSMuted, fontSize = 11.sp)
                                         Text(character.personality, color = CSMuted, fontSize = 12.sp, maxLines = 2)
                                     }
                                 }
                                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                     OutlinedButton(onClick = { active = character; editing = true }, modifier = Modifier.weight(1f)) { Text("Redigera") }
-                                    OutlinedButton(onClick = { exportTarget = character; exportLauncher.launch("\${character.name.replace(Regex("[^A-Za-z0-9_-]"), "_")}.unapp-profile.json") }, modifier = Modifier.weight(1f)) { Text("Exportera") }
+                                    OutlinedButton(onClick = { exportTarget = character; exportLauncher.launch("${character.name.replace(Regex("[^A-Za-z0-9_-]"), "_")}.unapp-profile.json") }, modifier = Modifier.weight(1f)) { Text("Exportera") }
                                     OutlinedButton(onClick = { characters = characters.filterNot { it.id == character.id }; putCharacters(context, characters) }) { Text("Ta bort") }
                                 }
                             }
