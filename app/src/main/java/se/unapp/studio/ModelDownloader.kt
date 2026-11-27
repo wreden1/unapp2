@@ -74,7 +74,7 @@ object ModelDownloader {
 
         var connection: HttpURLConnection? = null
         try {
-            connection = (URL(MODEL_URL).openConnection() as HttpURLConnection).apply {
+            var activeConnection = (URL(MODEL_URL).openConnection() as HttpURLConnection).apply {
                 connectTimeout = 45_000
                 readTimeout = 180_000
                 instanceFollowRedirects = true
@@ -86,16 +86,17 @@ object ModelDownloader {
                 }
             }
 
-            connection.connect()
-            var response = connection.responseCode
+            connection = activeConnection
+            activeConnection.connect()
+            var response = activeConnection.responseCode
 
             // Some mirrors ignore Range requests. In that case restart cleanly
             // instead of appending a full response to the partial file.
             if (downloaded > 0L && response == HttpURLConnection.HTTP_OK) {
-                connection.disconnect()
+                activeConnection.disconnect()
                 temporary.delete()
                 downloaded = 0L
-                connection = (URL(MODEL_URL).openConnection() as HttpURLConnection).apply {
+                activeConnection = (URL(MODEL_URL).openConnection() as HttpURLConnection).apply {
                     connectTimeout = 45_000
                     readTimeout = 180_000
                     instanceFollowRedirects = true
@@ -103,17 +104,18 @@ object ModelDownloader {
                     setRequestProperty("User-Agent", "UnApp-Android/1.0")
                     setRequestProperty("Accept-Encoding", "identity")
                 }
-                connection.connect()
-                response = connection.responseCode
+                connection = activeConnection
+                activeConnection.connect()
+                response = activeConnection.responseCode
             }
 
             val expectedResponse = if (downloaded > 0L) HttpURLConnection.HTTP_PARTIAL else HttpURLConnection.HTTP_OK
             check(response == expectedResponse) {
-                val detail = runCatching { connection.responseMessage }.getOrNull()
+                val detail = runCatching { activeConnection.responseMessage }.getOrNull()
                 "Nedladdningen misslyckades: HTTP $response ${detail ?: ""}. Kontrollera internetanslutningen och försök igen."
             }
 
-            val contentRange = connection.getHeaderField("Content-Range")
+            val contentRange = activeConnection.getHeaderField("Content-Range")
             if (downloaded > 0L) {
                 val rangeStart = Regex("^bytes (\\d+)-").find(contentRange.orEmpty())?.groupValues?.getOrNull(1)?.toLongOrNull()
                 check(rangeStart == downloaded) {
@@ -121,7 +123,7 @@ object ModelDownloader {
                 }
             }
 
-            val responseLength = connection.contentLengthLong
+            val responseLength = activeConnection.contentLengthLong
             val rangeTotal = Regex("/(\\d+)$").find(contentRange.orEmpty())?.groupValues?.getOrNull(1)?.toLongOrNull()
             val total = rangeTotal ?: if (responseLength > 0L) responseLength + downloaded else -1L
             var lastReportedBytes = downloaded
@@ -136,7 +138,7 @@ object ModelDownloader {
             )
 
             val append = downloaded > 0L
-            connection.inputStream.use { input ->
+            activeConnection.inputStream.use { input ->
                 FileOutputStream(temporary, append).buffered().use { output ->
                     val buffer = ByteArray(256 * 1024)
                     while (true) {
