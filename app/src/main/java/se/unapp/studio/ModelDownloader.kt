@@ -9,6 +9,12 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
 
+data class ModelDownloadProgress(
+    val downloadedBytes: Long,
+    val totalBytes: Long,
+    val percent: Int?
+)
+
 object ModelDownloader {
 
     const val MODEL_NAME = "Qwen3-1.7B-Q4_K_M.gguf"
@@ -29,7 +35,8 @@ object ModelDownloader {
 
     suspend fun download(
         context: Context,
-        onProgress: (Int) -> Unit = {}
+        onProgress: (Int) -> Unit = {},
+        onDetailedProgress: (ModelDownloadProgress) -> Unit = {}
     ): File = withContext(Dispatchers.IO) {
         val directory = File(context.filesDir, "models")
         if (!directory.exists() && !directory.mkdirs()) {
@@ -41,11 +48,10 @@ object ModelDownloader {
 
         if (destination.isFile && sha256(destination) == EXPECTED_SHA256) {
             onProgress(100)
+            onDetailedProgress(ModelDownloadProgress(destination.length(), destination.length(), 100))
             return@withContext destination
         }
 
-        // The old LiteRT model is no longer usable by llama.cpp. Remove it to
-        // reclaim space before downloading the replacement GGUF model.
         File(directory, LEGACY_MODEL_NAME).delete()
 
         val requiredBytes = 1_450_000_000L
@@ -68,6 +74,7 @@ object ModelDownloader {
 
             val total = connection.contentLengthLong
             var downloaded = 0L
+            onDetailedProgress(ModelDownloadProgress(0L, total, if (total > 0) 0 else null))
 
             connection.inputStream.use { input ->
                 temporary.outputStream().buffered().use { output ->
@@ -77,9 +84,9 @@ object ModelDownloader {
                         if (count < 0) break
                         output.write(buffer, 0, count)
                         downloaded += count
-                        if (total > 0) {
-                            onProgress(((downloaded * 100) / total).toInt().coerceIn(0, 100))
-                        }
+                        val percent = if (total > 0) ((downloaded * 100) / total).toInt().coerceIn(0, 100) else null
+                        if (percent != null) onProgress(percent)
+                        onDetailedProgress(ModelDownloadProgress(downloaded, total, percent))
                     }
                 }
             }
@@ -99,6 +106,7 @@ object ModelDownloader {
             }
 
             onProgress(100)
+            onDetailedProgress(ModelDownloadProgress(destination.length(), destination.length(), 100))
             destination
         } catch (error: Throwable) {
             temporary.delete()
