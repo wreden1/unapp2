@@ -119,7 +119,10 @@ private fun readTestChatCharacters(context: Context): List<UnAppCharacter> {
                 personality = item.optString("personality"), background = item.optString("background"),
                 speakingStyle = item.optString("speakingStyle"),
                 imageUri = item.optString("imageUri").takeIf { it.isNotBlank() },
-                category = item.optString("category", "Kvinna")
+                category = when (item.optString("category", "Kvinna")) {
+                    "Barn" -> "Tonårstjej"
+                    else -> item.optString("category", "Kvinna")
+                }
             )
         }
     }.getOrDefault(emptyList())
@@ -131,7 +134,14 @@ private fun testChatInstruction(character: UnAppCharacter?): String {
         IDENTITET OCH ROLL:
         Du ÄR ${character.name}, en egen fiktiv ${character.category.lowercase()} på ${character.age} år.
         Du är inte användaren. Du spelar inte upp användarens repliker.
-        ${if (character.category == "Barn") "Du är ett barn. Håll alla scenarier barnanpassade. Ingen romantisk eller sexuell rollgestaltning." else "Du är en vuxen karaktär."}
+        ${when (character.category) {
+            "Tonårstjej" -> "Personlighetsinriktning: tonårstjej – använd ett ungdomligt, självständigt och naturligt uttryck."
+            "Tonårspojke" -> "Personlighetsinriktning: tonårspojke – använd ett ungdomligt, självständigt och naturligt uttryck."
+            "Kvinna" -> "Personlighetsinriktning: kvinna – använd ett vuxet kvinnligt perspektiv och uttryck."
+            else -> "Personlighetsinriktning: man – använd ett vuxet manligt perspektiv och uttryck."
+        }}
+        Personlighetsinriktningen ändrar inte den ålder som står i profilen.
+        ${if ((character.age.toIntOrNull() ?: 18) < 18) "Karaktären är under 18 år. Håll allt innehåll åldersanpassat och icke-sexuellt." else "Karaktären är vuxen enligt den angivna åldern."}
         Du ska tänka, känna, minnas och svara utifrån din egen karaktär.
 
         DINA KARAKTÄRSDRAG:
@@ -409,8 +419,14 @@ fun TestChatScreen(onClose: () -> Unit) {
                                 selectedCharacter?.let { character ->
                                     append(
                                         "AKTIV KARAKTÄR – DETTA GÄLLER DIG I VARJE SVAR:\n" +
-                                        "Du är ${character.name}, en fiktiv ${character.category.lowercase()} på ${character.age} år. Du talar som ${character.name} i jag-form. " +
-                                        (if (character.category == "Barn") "Håll samtalet barnanpassat och undvik romantiskt eller sexuellt innehåll. " else "Du är en vuxen karaktär. ") +
+                                        "Du är ${character.name}, en fiktiv karaktär på ${character.age} år. Du talar som ${character.name} i jag-form. " +
+                                        (when (character.category) {
+                                            "Tonårstjej" -> "Din personlighetsinriktning är tonårstjej: använd ett ungdomligt, självständigt och naturligt uttryck. "
+                                            "Tonårspojke" -> "Din personlighetsinriktning är tonårspojke: använd ett ungdomligt, självständigt och naturligt uttryck. "
+                                            "Kvinna" -> "Din personlighetsinriktning är kvinna: använd ett vuxet kvinnligt perspektiv och uttryck. "
+                                            else -> "Din personlighetsinriktning är man: använd ett vuxet manligt perspektiv och uttryck. "
+                                        }) +
+                                        (if ((character.age.toIntOrNull() ?: 18) < 18) "Eftersom åldern är under 18 ska innehållet vara åldersanpassat och icke-sexuellt. " else "Karaktären är vuxen enligt den angivna åldern. ") +
                                         "Du är samtalspartnern, medan personen som skriver är användaren. " +
                                         "Du får aldrig ta över användarens berättelser, känslor, handlingar eller formuleringar. " +
                                         "Om användaren säger exempelvis ‘jag var på jobbet’ är det användaren som var på jobbet. " +
