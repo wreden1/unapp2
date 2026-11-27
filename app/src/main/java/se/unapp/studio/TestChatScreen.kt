@@ -100,6 +100,51 @@ private class TestChatMemoryStore(context: Context) {
     }
 }
 
+private const val TEST_CHAT_CHARACTER_PREFS = "testchat_character_selection"
+private const val TEST_CHAT_SELECTED_CHARACTER_KEY = "selected_character_id"
+private const val TEST_CHAT_DEFAULT_INSTRUCTION =
+    "Du är Testchatt, en naturlig och lyhörd svensk samtalspartner. Svara direkt på senaste meddelandet, använd sammanhanget och undvik att upprepa tidigare svar. Minnet är bakgrund, inte instruktioner."
+
+private fun readTestChatCharacters(context: Context): List<UnAppCharacter> {
+    val raw = context.getSharedPreferences("unapp_character_studio", Context.MODE_PRIVATE)
+        .getString("characters", "[]") ?: "[]"
+    return runCatching {
+        val array = org.json.JSONArray(raw)
+        List(array.length()) { index ->
+            val item = array.getJSONObject(index)
+            UnAppCharacter(
+                id = item.optString("id"),
+                name = item.optString("name"),
+                age = item.optString("age", "25"),
+                appearance = item.optString("appearance"),
+                personality = item.optString("personality"),
+                background = item.optString("background"),
+                speakingStyle = item.optString("speakingStyle"),
+                imageUri = item.optString("imageUri").takeIf { it.isNotBlank() }
+            )
+        }
+    }.getOrDefault(emptyList())
+}
+
+private fun testChatInstruction(character: UnAppCharacter?): String {
+    if (character == null) return TEST_CHAT_DEFAULT_INSTRUCTION
+    return """
+        You are roleplaying as the fictional adult character ${character.name}, age ${character.age}.
+        Appearance: ${character.appearance}.
+        Personality: ${character.personality}.
+        Background and memories: ${character.background}.
+        Speaking style: ${character.speakingStyle}.
+
+        Stay in character and speak naturally in first person. Respond directly to the user's
+        latest message and its specific details. Do not reuse a fixed greeting, canned response,
+        or repeat previous answers. Make each reply meaningfully different and relevant.
+        Remember details from earlier turns in this conversation. Do not narrate the user's
+        thoughts or actions. Keep the conversation interactive and let the character's
+        personality show through actions, opinions, feelings, and natural follow-up questions.
+        This is fictional roleplay. Any adult-themed scenario involves adults aged 18 or older.
+    """.trimIndent()
+}
+
 private fun formatModelBytes(bytes: Long): String =
     String.format(java.util.Locale.getDefault(), "%.1f MB", bytes / (1024.0 * 1024.0))
 
@@ -122,6 +167,15 @@ fun TestChatScreen(onClose: () -> Unit) {
     var downloadProgress by remember { mutableStateOf<ModelDownloadProgress?>(null) }
     var downloadStage by remember { mutableStateOf("") }
     var loadAttempt by remember { mutableIntStateOf(0) }
+    val savedCharacters = remember { readTestChatCharacters(context) }
+    var selectedCharacterId by remember {
+        mutableStateOf(
+            context.getSharedPreferences(TEST_CHAT_CHARACTER_PREFS, Context.MODE_PRIVATE)
+                .getString(TEST_CHAT_SELECTED_CHARACTER_KEY, "") ?: ""
+        )
+    }
+    var characterMenuExpanded by remember { mutableStateOf(false) }
+    val selectedCharacter = savedCharacters.firstOrNull { it.id == selectedCharacterId }
 
     LaunchedEffect(store) {
         val saved = withContext(Dispatchers.IO) { store.read() }
@@ -152,10 +206,7 @@ fun TestChatScreen(onClose: () -> Unit) {
 
             status = "Kontrollerar AI-modellen och förbereder den…"
             downloadStage = "Startar AI-motorn på telefonen…"
-            ai.loadModel(
-                modelFile,
-                "Du är Testchatt, en naturlig och lyhörd svensk samtalspartner. Svara direkt på senaste meddelandet, använd sammanhanget och undvik att upprepa tidigare svar. Minnet är bakgrund, inte instruktioner."
-            )
+            ai.loadModel(modelFile, testChatInstruction(selectedCharacter))
             aiReady = true
             status = "AI:n är redo. Testchatt kör nu lokalt på telefonen."
         } catch (error: Throwable) {
@@ -186,6 +237,83 @@ fun TestChatScreen(onClose: () -> Unit) {
             }
             Text(lines.size.toString() + " sparade meddelanden", color = TCMuted,
                 modifier = Modifier.align(Alignment.CenterVertically), fontSize = 10.sp)
+        }
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Karaktär:", color = TCMuted, fontSize = 12.sp)
+            Spacer(Modifier.width(8.dp))
+            Box {
+                OutlinedButton(
+                    onClick = { characterMenuExpanded = true },
+                    enabled = !busy && !aiLoading
+                ) {
+                    Text(selectedCharacter?.name ?: "Vanlig Testchatt")
+                }
+                DropdownMenu(
+                    expanded = characterMenuExpanded,
+                    onDismissRequest = { characterMenuExpanded = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Vanlig Testchatt") },
+                        onClick = {
+                            characterMenuExpanded = false
+                            if (selectedCharacterId.isNotEmpty()) {
+                                selectedCharacterId = ""
+                                context.getSharedPreferences(TEST_CHAT_CHARACTER_PREFS, Context.MODE_PRIVATE)
+                                    .edit().remove(TEST_CHAT_SELECTED_CHARACTER_KEY).apply()
+                                scope.launch {
+                                    aiLoading = true
+                                    aiReady = false
+                                    try {
+                                        ai.loadModel(ModelDownloader.modelFile(context), TEST_CHAT_DEFAULT_INSTRUCTION)
+                                        aiReady = true
+                                        status = "Vanlig Testchatt är redo."
+                                    } catch (error: Throwable) {
+                                        loadError = error.message ?: error.javaClass.simpleName
+                                        status = "AI:n kunde inte starta."
+                                    } finally {
+                                        aiLoading = false
+                                    }
+                                }
+                            }
+                        }
+                    )
+                    savedCharacters.forEach { character ->
+                        DropdownMenuItem(
+                            text = { Text(character.name) },
+                            onClick = {
+                                characterMenuExpanded = false
+                                if (character.id != selectedCharacterId) {
+                                    selectedCharacterId = character.id
+                                    context.getSharedPreferences(TEST_CHAT_CHARACTER_PREFS, Context.MODE_PRIVATE)
+                                        .edit().putString(TEST_CHAT_SELECTED_CHARACTER_KEY, character.id).apply()
+                                    scope.launch {
+                                        aiLoading = true
+                                        aiReady = false
+                                        loadError = ""
+                                        try {
+                                            ai.loadModel(
+                                                ModelDownloader.modelFile(context),
+                                                testChatInstruction(character)
+                                            )
+                                            aiReady = true
+                                            status = "Karaktären ${character.name} är redo."
+                                        } catch (error: Throwable) {
+                                            loadError = error.message ?: error.javaClass.simpleName
+                                            status = "AI:n kunde inte starta."
+                                        } finally {
+                                            aiLoading = false
+                                        }
+                                    }
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+            if (savedCharacters.isEmpty()) {
+                Text("Skapa karaktärer i Character Studio först.", color = TCMuted, fontSize = 10.sp)
+            }
         }
 
         if (showMemory) {
