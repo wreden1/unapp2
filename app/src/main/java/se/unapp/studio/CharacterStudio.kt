@@ -293,7 +293,7 @@ private fun CharacterForm(existing: UnAppCharacter?, onCancel: () -> Unit, onSav
         OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text("Avbryt") }
         Button(
             onClick = { val n = age.toIntOrNull(); if (name.isNotBlank() && n != null && n > 0 && ((category == "Barn" && n < 18) || (category != "Barn" && n >= 18))) onSave(UnAppCharacter(id = existing?.id ?: UUID.randomUUID().toString(), name = name.trim(), age = n.toString(), appearance = appearance, personality = personality, background = history, speakingStyle = voice, imageUri = picture, category = category)) },
-            enabled = name.isNotBlank() && (age.toIntOrNull()?.let { it > 0 && if (category == "Barn") it < 18 else it >= 18 } == true),
+            enabled = name.isNotBlank() && (age.toIntOrNull()?.let { it > 0 && ((category == "Barn" && it < 18) || (category != "Barn" && it >= 18)) } == true),
             modifier = Modifier.weight(1f)
         ) { Text("Spara profil") }
     }
