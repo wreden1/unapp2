@@ -18,6 +18,7 @@ on:
       - feature/character-studio
       - feature/appforge-visual-shell-preview
       - fix/expand-chat-history
+      - feature/unified-chat-character-profiles
 
 jobs:
   build:
