@@ -109,7 +109,6 @@ fun TestChatScreen(onClose: () -> Unit) {
     val scope = rememberCoroutineScope()
     val store = remember { TestChatMemoryStore(context) }
     val ai = remember { LocalAiEngine(context) }
-    val model = remember { ModelDownloader.modelFile(context) }
     var lines by remember { mutableStateOf(emptyList<TestChatLine>()) }
     var draft by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
@@ -137,19 +136,19 @@ fun TestChatScreen(onClose: () -> Unit) {
         loadError = ""
         downloadProgress = null
         try {
-            var modelFile = ModelDownloader.modelFile(context)
-            if (!modelFile.isFile) {
-                status = "Laddar ner AI-modellen…"
-                modelFile = ModelDownloader.download(
-                    context,
-                    onDetailedProgress = { progress ->
-                        downloadProgress = progress
-                        downloadStage = progress.stage
-                    }
-                )
+            val modelAlreadyPresent = ModelDownloader.modelFile(context).isFile
+            status = if (modelAlreadyPresent) {
+                "Kontrollerar den befintliga AI-modellen…"
             } else {
-                status = "AI-modellen finns. Kontrollerar och startar…"
+                "Laddar ner AI-modellen…"
             }
+            val modelFile = ModelDownloader.download(
+                context,
+                onDetailedProgress = { progress ->
+                    downloadProgress = progress
+                    downloadStage = progress.stage
+                }
+            )
 
             status = "Kontrollerar AI-modellen och förbereder den…"
             downloadStage = "Startar AI-motorn på telefonen…"
