@@ -70,3 +70,4 @@ jobs:
 
 # Rebuild Testchatt after clearer character identity and speaker separation.
 # Rebuild after character profile Kotlin string interpolation fix.
+# Rebuild after Kotlin lowercase deprecation fix.
