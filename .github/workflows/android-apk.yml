@@ -12,6 +12,7 @@ on:
     branches:
       - main
       - feature/character-studio
+      - feature/appforge-visual-shell-preview
       - fix/expand-chat-history
 
 jobs:

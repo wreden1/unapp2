@@ -1,6 +1,7 @@
 package se.unapp.studio
 
 import android.content.Context
+import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -9,7 +10,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -27,7 +30,8 @@ private const val FORGE_PROJECTS = "projects"
 private data class ForgeProject(
     val name: String,
     val description: String,
-    val blueprint: String
+    val blueprint: String,
+    val previewInstructions: String = ""
 )
 
 private fun loadForgeProjects(context: Context): List<ForgeProject> {
@@ -40,7 +44,8 @@ private fun loadForgeProjects(context: Context): List<ForgeProject> {
             ForgeProject(
                 item.optString("name", "Min app"),
                 item.optString("description", ""),
-                item.optString("blueprint", "")
+                item.optString("blueprint", ""),
+                item.optString("previewInstructions", "")
             )
         }
     } catch (_: Exception) {
@@ -55,6 +60,7 @@ private fun saveForgeProjects(context: Context, projects: List<ForgeProject>) {
             put("name", project.name)
             put("description", project.description)
             put("blueprint", project.blueprint)
+            put("previewInstructions", project.previewInstructions)
         })
     }
     context.getSharedPreferences(FORGE_PREFS, Context.MODE_PRIVATE)
@@ -70,6 +76,13 @@ fun AppForgeScreen(
     val scope = rememberCoroutineScope()
     var appName by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
+    var previewInstructions by remember { mutableStateOf("") }
+    var previewEnabled by remember { mutableStateOf(false) }
+    var buttonsEnabled by remember { mutableStateOf(true) }
+    var writeInstead by remember { mutableStateOf(false) }
+    var typedInstructions by remember { mutableStateOf("") }
+    var chatInput by remember { mutableStateOf("") }
+    val dialogue = remember { mutableStateListOf<Pair<String, String>>() }
     var allowedRules by remember { mutableStateOf("") }
     var blockedRules by remember { mutableStateOf("") }
     var allowInternet by remember { mutableStateOf(false) }
@@ -79,6 +92,23 @@ fun AppForgeScreen(
     var allowFiles by remember { mutableStateOf(true) }
     var isGenerating by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
+    var generationStartedAt by remember { mutableLongStateOf(0L) }
+    var lastProgressAt by remember { mutableLongStateOf(0L) }
+    var elapsedSeconds by remember { mutableIntStateOf(0) }
+    var isStalled by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isGenerating) {
+        if (isGenerating) {
+            while (isGenerating) {
+                delay(1000)
+                val now = SystemClock.elapsedRealtime()
+                elapsedSeconds = ((now - generationStartedAt) / 1000L).toInt()
+                isStalled = now - lastProgressAt >= 30_000L
+            }
+        } else {
+            isStalled = false
+        }
+    }
     var blueprint by remember { mutableStateOf("") }
     var projects by remember { mutableStateOf(loadForgeProjects(context)) }
     var previewProject by remember { mutableStateOf<ForgeProject?>(null) }
@@ -105,6 +135,30 @@ fun AppForgeScreen(
                 ForgeField("APPENS NAMN", appName, { appName = it }, "Exempel: Min träningsapp")
                 ForgeField("VAD SKA APPEN GÖRA?", description, { description = it }, "Beskriv appens utseende, funktioner, flöden och målgrupp...", minLines = 5)
 
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = previewEnabled, onCheckedChange = { previewEnabled = it })
+                    Column(Modifier.weight(1f)) {
+                        Text("Aktivera förhandsvisning", color = Color.White, fontWeight = FontWeight.SemiBold)
+                        Text("Visa en visuell modell av appen medan du beskriver den.", color = ForgeMuted, fontSize = 12.sp)
+                    }
+                }
+                if (previewEnabled && buttonsEnabled && !writeInstead) {
+                    ForgeField("VAD VILL DU SE I FÖRHANDSVISNINGEN?", previewInstructions, { previewInstructions = it }, "Beskriv exempelvis startsidan, färger och knappar...")
+                    Button(
+                        onClick = {
+                            previewProject = ForgeProject(
+                                appName.ifBlank { "Min app" },
+                                description + "\n" + dialogue.filter { it.first == "Du" }.joinToString("\n") { it.second },
+                                blueprint,
+                                previewInstructions
+                            )
+                        },
+                        enabled = description.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        shape = RoundedCornerShape(14.dp)
+                    ) { Text("Visa / uppdatera förhandsvisning") }
+                }
+
                 Text("BEHÖRIGHETER DU TILLÅTER", color = ForgeAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 Text("Avstängda behörigheter ska inte begäras av den skapade appen.", color = ForgeMuted, fontSize = 12.sp)
                 ForgeToggle("Internetåtkomst", allowInternet) { allowInternet = it }
@@ -118,48 +172,188 @@ fun AppForgeScreen(
 
                 Text("Dina regler styr appens utformning. Androids behörighetsmodell och grundläggande säkerhetskrav kan inte stängas av.", color = ForgeMuted, fontSize = 11.sp)
 
-                Button(
-                    onClick = {
-                        isGenerating = true
-                        status = "AI:n arbetar lokalt..."
-                        blueprint = ""
-                        val request = buildString {
-                            appendLine("Du är AppForge AI, en lokal Android-appbyggare.")
-                            appendLine("Skapa en detaljerad, genomförbar Android-appspecifikation utifrån användarens beskrivning.")
-                            appendLine("Svara på svenska. Hitta inte på att APK har byggts. Redovisa skärmar, användarflöden, datamodell, funktioner, behörigheter, filstruktur och byggsteg.")
-                            appendLine("Gör inga nätverksanrop i den skapade appen om inte internet uttryckligen är tillåtet.")
-                            appendLine("Appnamn: ${appName.ifBlank { "Namnlös app" }}")
-                            appendLine("Appbeskrivning: $description")
-                            appendLine("Tillåtna behörigheter: " + listOfNotNull(
-                                if (allowInternet) "Internet" else null,
-                                if (allowCamera) "Kamera" else null,
-                                if (allowLocation) "Plats" else null,
-                                if (allowMicrophone) "Mikrofon" else null,
-                                if (allowFiles) "Filer/lokal lagring" else null
-                            ).joinToString().ifBlank { "Inga särskilda behörigheter" })
-                            appendLine("Egna tillåtna regler: $allowedRules")
-                            appendLine("Egna förbjudna regler: $blockedRules")
-                            appendLine("Om någon önskad funktion kräver en nekad behörighet, föreslå ett alternativ som följer användarens regel.")
-                        }
-                        scope.launch {
-                            try {
-                                blueprint = onGenerate(request) { message -> status = message }
-                                status = if (blueprint.isBlank()) "AI:n gav inget resultat. Försök igen." else "Appspecifikationen är skapad."
-                            } catch (error: Throwable) {
-                                status = error.message ?: "Det gick inte att skapa appspecifikationen."
-                            } finally {
-                                isGenerating = false
-                            }
-                        }
-                    },
-                    enabled = description.isNotBlank() && !isGenerating,
-                    modifier = Modifier.fillMaxWidth().height(54.dp),
-                    shape = RoundedCornerShape(14.dp)
-                ) {
-                    Text(if (isGenerating) "Skapar..." else "Skapa appspecifikation med lokal AI", fontWeight = FontWeight.Bold)
+                Text("HUR VILL DU STYRA APPFORGE?", color = ForgeAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = buttonsEnabled, onCheckedChange = { buttonsEnabled = it })
+                    Column(Modifier.weight(1f)) {
+                        Text("Aktivera befintliga knappar", color = Color.White, fontWeight = FontWeight.SemiBold)
+                        Text("Visar knapparna för att skapa appspecifikation och förhandsvisa.", color = ForgeMuted, fontSize = 12.sp)
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = writeInstead, onCheckedChange = { writeInstead = it })
+                    Column(Modifier.weight(1f)) {
+                        Text("Skriv instruktioner istället", color = Color.White, fontWeight = FontWeight.SemiBold)
+                        Text("Skriv med egna ord vad AI:n ska göra, i stället för att använda arbetsknapparna.", color = ForgeMuted, fontSize = 12.sp)
+                    }
                 }
 
-                if (status.isNotBlank()) Text(status, color = ForgeMuted, fontSize = 13.sp)
+                if (buttonsEnabled && !writeInstead) {
+                    Button(
+                        onClick = {
+                            isGenerating = true
+                            generationStartedAt = SystemClock.elapsedRealtime()
+                            lastProgressAt = generationStartedAt
+                            elapsedSeconds = 0
+                            isStalled = false
+                            status = "AI:n arbetar lokalt..."
+                            blueprint = ""
+                            val request = buildString {
+                                appendLine("Du är AppForge AI, en lokal Android-appbyggare. Svara på svenska.")
+                                appendLine("Skapa en detaljerad, genomförbar Android-appspecifikation utifrån användarens beskrivning.")
+                                appendLine("Redovisa skärmar, användarflöden, datamodell, funktioner, behörigheter, filstruktur och byggsteg. Hitta inte på att en APK har byggts.")
+                                appendLine("Appnamn: ${appName.ifBlank { "Namnlös app" }}")
+                                appendLine("Appbeskrivning: $description")
+                                appendLine("Tillåtna behörigheter: " + listOfNotNull(
+                                    if (allowInternet) "Internet" else null,
+                                    if (allowCamera) "Kamera" else null,
+                                    if (allowLocation) "Plats" else null,
+                                    if (allowMicrophone) "Mikrofon" else null,
+                                    if (allowFiles) "Filer/lokal lagring" else null
+                                ).joinToString().ifBlank { "Inga särskilda behörigheter" })
+                                appendLine("Egna tillåtna regler: $allowedRules")
+                                appendLine("Egna förbjudna regler: $blockedRules")
+                            }
+                            scope.launch {
+                                try {
+                                    blueprint = onGenerate(request) {
+                                        progress ->
+                                        status = progress
+                                        lastProgressAt = SystemClock.elapsedRealtime()
+                                    }
+                                    status = if (blueprint.isBlank()) "AI:n gav inget resultat. Försök igen." else "Appspecifikationen är skapad."
+                                } catch (error: Throwable) {
+                                    status = error.message ?: "Det gick inte att skapa appspecifikationen."
+                                } finally { isGenerating = false }
+                            }
+                        },
+                        enabled = description.isNotBlank() && !isGenerating,
+                        modifier = Modifier.fillMaxWidth().height(54.dp),
+                        shape = RoundedCornerShape(14.dp)
+                    ) { Text(if (isGenerating) "Skapar..." else "Skapa appspecifikation med lokal AI", fontWeight = FontWeight.Bold) }
+                }
+
+                if (writeInstead) {
+                    ForgeField(
+                        "SKRIV VAD DU VILL ATT AI:N SKA GÖRA",
+                        typedInstructions,
+                        { typedInstructions = it },
+                        "Exempel: Lägg till en inloggningssida och en meny med tre val...",
+                        minLines = 4
+                    )
+                    Button(
+                        onClick = {
+                            val prompt = typedInstructions.trim()
+                            if (prompt.isNotEmpty()) {
+                                isGenerating = true
+                                generationStartedAt = SystemClock.elapsedRealtime()
+                                lastProgressAt = generationStartedAt
+                                elapsedSeconds = 0
+                                isStalled = false
+                                status = "AI:n arbetar med dina instruktioner..."
+                                val request = buildString {
+                                    appendLine("Du är AppForge AI, en lokal Android-appbyggare. Svara på svenska.")
+                                    appendLine("Detta är en fortsättning på ett appprojekt. Följ användarens senaste instruktion och behåll tidigare beslut.")
+                                    appendLine("Om information saknas, ställ en tydlig följdfråga i stället för att gissa.")
+                                    appendLine("Appnamn: ${appName.ifBlank { "Namnlös app" }}")
+                                    appendLine("Appens grundbeskrivning: $description")
+                                    appendLine("Tidigare appspecifikation och samtalskontext: $blueprint")
+                                    appendLine("Tillåtna behörigheter: " + listOfNotNull(
+                                        if (allowInternet) "Internet" else null,
+                                        if (allowCamera) "Kamera" else null,
+                                        if (allowLocation) "Plats" else null,
+                                        if (allowMicrophone) "Mikrofon" else null,
+                                        if (allowFiles) "Filer/lokal lagring" else null
+                                    ).joinToString().ifBlank { "Inga särskilda behörigheter" })
+                                    appendLine("Egna tillåtna regler: $allowedRules")
+                                    appendLine("Egna förbjudna regler: $blockedRules")
+                                    appendLine("Användarens instruktion: $prompt")
+                                    appendLine("Svara med vad du förstått och fråga vidare om nästa steg behövs. Om användaren ber om en fullständig plan, sammanställ hela den uppdaterade appspecifikationen.")
+                                }
+                                scope.launch {
+                                    try {
+                                        val answer = onGenerate(request) {
+                                            progress ->
+                                            status = progress
+                                            lastProgressAt = SystemClock.elapsedRealtime()
+                                        }
+                                        if (answer.isNotBlank()) {
+                                            blueprint = answer
+                                            status = "AI:n har svarat. Du kan skriva nästa instruktion i rutan."
+                                        } else status = "AI:n gav inget svar. Försök igen."
+                                    } catch (error: Throwable) {
+                                        status = error.message ?: "Det gick inte att kontakta den lokala AI:n."
+                                    } finally { isGenerating = false }
+                                }
+                            }
+                        },
+                        enabled = typedInstructions.isNotBlank() && !isGenerating,
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) { Text(if (isGenerating) "AI:n arbetar..." else "Skicka instruktion") }
+                }
+
+                if (!buttonsEnabled && !writeInstead) {
+                    Text("Välj antingen «Aktivera befintliga knappar» eller «Skriv instruktioner istället» för att fortsätta.", color = ForgeMuted, fontSize = 12.sp)
+                }
+
+                if (isGenerating) {
+                    Column(
+                        Modifier.fillMaxWidth()
+                            .background(ForgePanel, RoundedCornerShape(14.dp))
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(9.dp)
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("SKAPANDE PÅGÅR", color = ForgeAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                String.format("%02d:%02d", elapsedSeconds / 60, elapsedSeconds % 60),
+                                color = ForgeMuted,
+                                fontSize = 12.sp
+                            )
+                        }
+                        LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = ForgeAccent,
+                            trackColor = ForgeMuted.copy(alpha = 0.18f)
+                        )
+                        Text(status.ifBlank { "Väntar på lokal AI..." }, color = Color.White, fontSize = 13.sp)
+                        if (isStalled) {
+                            Text(
+                                "Ingen ny status har kommit på 30 sekunder. AI:n kan fortfarande arbeta, men processen kan ha fastnat. Vänta lite till eller kontrollera om modellen svarar.",
+                                color = Color(0xFFFFC56E),
+                                fontSize = 12.sp,
+                                lineHeight = 17.sp
+                            )
+                        } else {
+                            Text(
+                                "Övervakar verkliga statusuppdateringar från skapandet. Ingen påhittad procent visas.",
+                                color = ForgeMuted,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+                }
+                if (!isGenerating && status.isNotBlank()) {
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .background(ForgePanel, RoundedCornerShape(12.dp))
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            if (blueprint.isNotBlank()) "✓" else "!",
+                            color = if (blueprint.isNotBlank()) Color(0xFF75D69A) else Color(0xFFFFC56E),
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(status, color = ForgeMuted, fontSize = 13.sp)
+                    }
+                }
                 if (blueprint.isNotBlank()) {
                     Column(Modifier.fillMaxWidth().background(ForgePanel, RoundedCornerShape(16.dp)).padding(14.dp)) {
                         Text("APPENS PLAN", color = ForgeAccent, fontWeight = FontWeight.Bold, fontSize = 12.sp)
@@ -167,17 +361,11 @@ fun AppForgeScreen(
                         Text(blueprint, color = Color.White, fontSize = 13.sp, lineHeight = 19.sp)
                         Spacer(Modifier.height(12.dp))
                         OutlinedButton(onClick = {
-                            val saved = projects + ForgeProject(appName.ifBlank { "Min app" }, description, blueprint)
+                            val saved = projects + ForgeProject(appName.ifBlank { "Min app" }, description, blueprint, previewInstructions)
                             projects = saved
                             saveForgeProjects(context, saved)
                             status = "Appspecifikationen har sparats lokalt."
                         }, modifier = Modifier.fillMaxWidth()) { Text("Spara projekt lokalt") }
-                        Button(
-                            onClick = {
-                                previewProject = ForgeProject(appName.ifBlank { "Min app" }, description, blueprint)
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) { Text("Öppna förhandsvisning") }
                         OutlinedButton(
                             onClick = { status = "APK-byggaren är nästa steg. Projektet är sparat, men en separat installationsfil kan ännu inte skapas." },
                             enabled = false,
@@ -217,45 +405,197 @@ fun AppForgeScreen(
 
 @Composable
 private fun ForgePreviewDialog(project: ForgeProject, onDismiss: () -> Unit) {
+    val combined = (project.name + " " + project.description + " " + project.previewInstructions).lowercase()
+    val kind = when {
+        listOf("miniräknare", "kalkylator", "calculator").any { it in combined } -> "calculator"
+        listOf("chatt", "chat", "meddelande", "meddelanden").any { it in combined } -> "chat"
+        listOf("kalender", "schema", "bokning").any { it in combined } -> "calendar"
+        listOf("anteckning", "notes", "kom ihåg").any { it in combined } -> "notes"
+        else -> "generic"
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text(
-                "APPFÖRHANDSVISNING",
-                color = ForgeAccent,
-                fontWeight = FontWeight.Bold
-            )
+            Text("FÖRHANDSVISNING", color = ForgeAccent, fontWeight = FontWeight.Bold)
         },
         text = {
             Column(
-                Modifier.fillMaxWidth().heightIn(max = 480.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                Modifier.fillMaxWidth().heightIn(max = 570.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text(project.name, color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.Bold)
-                Text(project.description, color = ForgeMuted, fontSize = 14.sp, lineHeight = 21.sp)
-                Divider(color = ForgeMuted.copy(alpha = 0.25f))
                 Text(
-                    "APPENS FUNKTIONER OCH SKÄRMAR",
-                    color = ForgeAccent,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold
+                    "Så här kan din app se ut",
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold
                 )
-                Text(project.blueprint, color = Color.White, fontSize = 13.sp, lineHeight = 19.sp)
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = Color(0xFFF4F5FA),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("9:41", color = Color(0xFF20243A), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text("●  ●  ▰", color = Color(0xFF20243A), fontSize = 10.sp)
+                        }
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(project.name.ifBlank { "Min app" }, color = Color(0xFF171B2D), fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                            Surface(color = Color(0xFFE7E8F4), shape = RoundedCornerShape(50)) {
+                                Text("•••", color = Color(0xFF343954), modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp))
+                            }
+                        }
+                        if (project.previewInstructions.isNotBlank()) {
+                            Text(project.previewInstructions, color = Color(0xFF626982), fontSize = 12.sp)
+                        }
+                        when (kind) {
+                            "calculator" -> PreviewCalculator()
+                            "chat" -> PreviewChat()
+                            "calendar" -> PreviewCalendar()
+                            "notes" -> PreviewNotes()
+                            else -> PreviewGeneric(project)
+                        }
+                        Row(
+                            Modifier.fillMaxWidth().background(Color(0xFFE8EAF3), RoundedCornerShape(14.dp)).padding(vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceEvenly
+                        ) {
+                            listOf("Hem", "Sök", "Sparat", "Profil").forEach {
+                                Text(it, color = Color(0xFF4A5068), fontSize = 10.sp, fontWeight = FontWeight.Medium)
+                            }
+                        }
+                    }
+                }
                 Text(
-                    "Det här är en visuell förhandsvisning av AI:ns appplan – inte en färdig, körbar app ännu. Dina andra UnApp-funktioner påverkas inte.",
+                    "Detta är ett visuellt appskal. Knappar och funktioner är bara exempel och gör ingenting ännu.",
                     color = ForgeMuted,
                     fontSize = 12.sp,
-                    lineHeight = 18.sp
+                    lineHeight = 17.sp
                 )
             }
         },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Stäng") }
-        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Stäng") } },
         containerColor = Color(0xFF151D32),
         titleContentColor = Color.White,
         textContentColor = Color.White
     )
+}
+
+@Composable
+private fun PreviewCalculator() {
+    Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        Surface(color = Color.White, shape = RoundedCornerShape(15.dp), modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.End) {
+                Text("123 + 456", color = Color(0xFF8A8FA4), fontSize = 13.sp)
+                Text("579", color = Color(0xFF171B2D), fontSize = 34.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+        listOf(
+            listOf("AC", "±", "%", "÷"),
+            listOf("7", "8", "9", "×"),
+            listOf("4", "5", "6", "−"),
+            listOf("1", "2", "3", "+"),
+            listOf("⌫", "0", ",", "=")
+        ).forEach { row ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                row.forEach { key ->
+                    val accent = key in listOf("÷", "×", "−", "+", "=")
+                    Surface(
+                        modifier = Modifier.weight(1f).height(48.dp),
+                        color = if (accent) Color(0xFF6658D9) else Color.White,
+                        shape = RoundedCornerShape(13.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(key, color = if (accent) Color.White else Color(0xFF252A40), fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PreviewChat() {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Surface(color = Color(0xFFE5E7F1), shape = RoundedCornerShape(15.dp), modifier = Modifier.fillMaxWidth(0.82f)) {
+            Text("Hej! Välkommen till chatten.", color = Color(0xFF272C43), modifier = Modifier.padding(12.dp), fontSize = 13.sp)
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            Surface(color = Color(0xFF6B5CE7), shape = RoundedCornerShape(15.dp), modifier = Modifier.fillMaxWidth(0.82f)) {
+                Text("Hej! Vad kan jag hjälpa dig med?", color = Color.White, modifier = Modifier.padding(12.dp), fontSize = 13.sp)
+            }
+        }
+        Surface(color = Color.White, shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()) {
+            Text("Skriv ett meddelande…                         ➤", color = Color(0xFF858BA0), modifier = Modifier.padding(14.dp), fontSize = 12.sp)
+        }
+    }
+}
+
+@Composable
+private fun PreviewCalendar() {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text("NOVEMBER 2026", color = Color(0xFF292E45), fontWeight = FontWeight.Bold, fontSize = 15.sp)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            listOf("M", "T", "O", "T", "F", "L", "S").forEach {
+                Text(it, color = Color(0xFF858BA0), modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center, fontSize = 11.sp)
+            }
+        }
+        (1..28 step 7).forEach { first ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                (first..(first + 6)).forEach { day ->
+                    Surface(color = if (day == 26) Color(0xFF6658D9) else Color.Transparent, shape = RoundedCornerShape(10.dp), modifier = Modifier.weight(1f).height(36.dp)) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(day.toString(), color = if (day == 26) Color.White else Color(0xFF343950), fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+        }
+        PreviewInfoCard("Kommande", "09:00  •  Möte\n13:30  •  Påminnelse")
+    }
+}
+
+@Composable
+private fun PreviewNotes() {
+    Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        PreviewInfoCard("Mina anteckningar", "Idéer och tankar samlade på ett ställe.")
+        PreviewInfoCard("Att göra", "□ Planera veckan\n□ Handla\n□ Följ upp projektet")
+        PreviewInfoCard("Snabbanteckning", "Skriv en ny anteckning här…")
+    }
+}
+
+@Composable
+private fun PreviewGeneric(project: ForgeProject) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Surface(color = Color(0xFFE7E5FF), shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Text("VÄLKOMMEN", color = Color(0xFF6558C8), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text(project.previewInstructions.ifBlank { "Din app, på ditt sätt" }, color = Color(0xFF20243A), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text(project.description.take(110), color = Color(0xFF626982), fontSize = 12.sp)
+            }
+        }
+        PreviewInfoCard("Översikt", "Här visas appens viktigaste information.")
+        PreviewInfoCard("Funktioner", "• Första funktionen\n• Andra funktionen\n• Dina genvägar")
+        PreviewInfoCard("Senaste aktivitet", "Inget att visa ännu")
+    }
+}
+
+@Composable
+private fun PreviewInfoCard(title: String, body: String) {
+    Surface(color = Color.White, shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(title, color = Color(0xFF252A40), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Text(body, color = Color(0xFF697087), fontSize = 12.sp, lineHeight = 17.sp)
+        }
+    }
 }
 
 @Composable
