@@ -53,7 +53,7 @@ class LocalAiEngine(context: Context) {
                 inference.setConversationHistory(recentHistory.takeLast(CHAT_HISTORY_MESSAGE_LIMIT))
             }
             val response = StringBuilder()
-            inference.sendUserPrompt("$prompt\\n/no_think", predictLength = 1536).collect { token ->
+            inference.sendUserPrompt("$prompt\n/no_think", predictLength = 1536).collect { token ->
                 response.append(token)
             }
             val visibleReply = response.toString()
