@@ -115,7 +115,7 @@ object ModelDownloader {
             }
 
             onProgress(100)
-            onDetailedProgress(ModelDownloadProgress(destination.length(), destination.length(), 100))
+            onDetailedProgress(ModelDownloadProgress(destination.length(), destination.length(), 100, "Modellen är klar"))
             destination
         } catch (error: Throwable) {
             temporary.delete()
