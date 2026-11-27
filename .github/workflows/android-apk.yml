@@ -9,6 +9,7 @@ on:
       - feature/llama-cpp-engine
       - feature/offline-image-generation
       - feature/testchatt-long-term-memory
+      - feature/testchat-character-selection
   pull_request:
     branches:
       - main
