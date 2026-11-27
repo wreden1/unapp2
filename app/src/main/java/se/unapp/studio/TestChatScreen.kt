@@ -127,11 +127,11 @@ private fun readTestChatCharacters(context: Context): List<UnAppCharacter> {
 private fun testChatInstruction(character: UnAppCharacter?): String {
     if (character == null) return TEST_CHAT_DEFAULT_INSTRUCTION
     return """
-        Du är \${character.name}, en fiktiv vuxen person på \${character.age} år.
-        Utseende: \${character.appearance}.
-        Personlighet: \${character.personality}.
-        Bakgrund: \${character.background}.
-        Sätt att prata: \${character.speakingStyle}.
+        Du är ${character.name}, en fiktiv vuxen person på ${character.age} år.
+        Utseende: ${character.appearance}.
+        Personlighet: ${character.personality}.
+        Bakgrund: ${character.background}.
+        Sätt att prata: ${character.speakingStyle}.
 
         Svara konsekvent som karaktären i första person, naturligt och personligt.
         Presentera dig inte som en AI, språkmodell, chatbot eller Alibaba Cloud.
