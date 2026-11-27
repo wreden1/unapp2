@@ -76,6 +76,9 @@ fun AppForgeScreen(
     var description by remember { mutableStateOf("") }
     var previewInstructions by remember { mutableStateOf("") }
     var previewEnabled by remember { mutableStateOf(false) }
+    var buttonsEnabled by remember { mutableStateOf(true) }
+    var writeInstead by remember { mutableStateOf(false) }
+    var typedInstructions by remember { mutableStateOf("") }
     var chatInput by remember { mutableStateOf("") }
     val dialogue = remember { mutableStateListOf<Pair<String, String>>() }
     var allowedRules by remember { mutableStateOf("") }
@@ -150,68 +153,98 @@ fun AppForgeScreen(
 
                 Text("Dina regler styr appens utformning. Androids behörighetsmodell och grundläggande säkerhetskrav kan inte stängas av.", color = ForgeMuted, fontSize = 11.sp)
 
-                Text("SAMTAL MED APPFORGE AI", color = ForgeAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                Text("Skriv vad du vill att appen ska göra. AI:n kan ställa följdfrågor och du svarar här, steg för steg.", color = ForgeMuted, fontSize = 13.sp)
-                Column(
-                    Modifier.fillMaxWidth().background(ForgePanel, RoundedCornerShape(16.dp)).padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(9.dp)
-                ) {
-                    if (dialogue.isEmpty()) {
-                        Text("AppForge: Berätta om appidén så hjälper jag dig att forma den. Jag frågar om detaljer som saknas.", color = Color.White, fontSize = 13.sp)
-                    } else {
-                        dialogue.forEach { (speaker, messageText) ->
-                            Surface(color = if (speaker == "Du") Color(0xFF293452) else Color(0xFF202B42), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
-                                Column(Modifier.padding(10.dp)) {
-                                    Text(speaker, color = ForgeAccent, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                    Text(messageText, color = Color.White, fontSize = 13.sp)
-                                }
-                            }
-                        }
+                Text("HUR VILL DU STYRA APPFORGE?", color = ForgeAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = buttonsEnabled, onCheckedChange = { buttonsEnabled = it })
+                    Column(Modifier.weight(1f)) {
+                        Text("Aktivera befintliga knappar", color = Color.White, fontWeight = FontWeight.SemiBold)
+                        Text("Visar knapparna för att skapa appspecifikation och förhandsvisa.", color = ForgeMuted, fontSize = 12.sp)
                     }
-                    OutlinedTextField(
-                        value = chatInput,
-                        onValueChange = { chatInput = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Skriv ditt svar eller nästa önskemål...") },
-                        minLines = 2,
-                        maxLines = 5,
-                        enabled = !isGenerating,
-                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = ForgeAccent, unfocusedBorderColor = ForgeMuted.copy(alpha = 0.35f), cursorColor = ForgeAccent)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = writeInstead, onCheckedChange = { writeInstead = it })
+                    Column(Modifier.weight(1f)) {
+                        Text("Skriv instruktioner istället", color = Color.White, fontWeight = FontWeight.SemiBold)
+                        Text("Skriv med egna ord vad AI:n ska göra, i stället för att använda arbetsknapparna.", color = ForgeMuted, fontSize = 12.sp)
+                    }
+                }
+
+                if (buttonsEnabled && !writeInstead) {
+                    Button(
+                        onClick = {
+                            isGenerating = true
+                            status = "AI:n arbetar lokalt..."
+                            blueprint = ""
+                            val request = buildString {
+                                appendLine("Du är AppForge AI, en lokal Android-appbyggare. Svara på svenska.")
+                                appendLine("Skapa en detaljerad, genomförbar Android-appspecifikation utifrån användarens beskrivning.")
+                                appendLine("Redovisa skärmar, användarflöden, datamodell, funktioner, behörigheter, filstruktur och byggsteg. Hitta inte på att en APK har byggts.")
+                                appendLine("Appnamn: ${appName.ifBlank { "Namnlös app" }}")
+                                appendLine("Appbeskrivning: $description")
+                                appendLine("Tillåtna behörigheter: " + listOfNotNull(
+                                    if (allowInternet) "Internet" else null,
+                                    if (allowCamera) "Kamera" else null,
+                                    if (allowLocation) "Plats" else null,
+                                    if (allowMicrophone) "Mikrofon" else null,
+                                    if (allowFiles) "Filer/lokal lagring" else null
+                                ).joinToString().ifBlank { "Inga särskilda behörigheter" })
+                                appendLine("Egna tillåtna regler: $allowedRules")
+                                appendLine("Egna förbjudna regler: $blockedRules")
+                            }
+                            scope.launch {
+                                try {
+                                    blueprint = onGenerate(request) { progress -> status = progress }
+                                    status = if (blueprint.isBlank()) "AI:n gav inget resultat. Försök igen." else "Appspecifikationen är skapad."
+                                } catch (error: Throwable) {
+                                    status = error.message ?: "Det gick inte att skapa appspecifikationen."
+                                } finally { isGenerating = false }
+                            }
+                        },
+                        enabled = description.isNotBlank() && !isGenerating,
+                        modifier = Modifier.fillMaxWidth().height(54.dp),
+                        shape = RoundedCornerShape(14.dp)
+                    ) { Text(if (isGenerating) "Skapar..." else "Skapa appspecifikation med lokal AI", fontWeight = FontWeight.Bold) }
+                }
+
+                if (writeInstead) {
+                    ForgeField(
+                        "SKRIV VAD DU VILL ATT AI:N SKA GÖRA",
+                        typedInstructions,
+                        { typedInstructions = it },
+                        "Exempel: Lägg till en inloggningssida och en meny med tre val...",
+                        minLines = 4
                     )
                     Button(
                         onClick = {
-                            val message = chatInput.trim()
-                            if (message.isNotEmpty()) {
-                                chatInput = ""
-                                dialogue.add("Du" to message)
+                            val prompt = typedInstructions.trim()
+                            if (prompt.isNotEmpty()) {
                                 isGenerating = true
-                                status = "AppForge tänker..."
+                                status = "AI:n arbetar med dina instruktioner..."
                                 val request = buildString {
-                                    appendLine("Du är AppForge AI, en hjälpsam lokal appbyggarassistent. Svara alltid på svenska.")
-                                    appendLine("Detta är ett pågående samtal. Läs hela historiken och kom ihåg alla tidigare beslut.")
-                                    appendLine("Ställ EN tydlig följdfråga i taget om viktig information saknas. Bekräfta ändringar och förklara hur de påverkar appen.")
-                                    appendLine("Skapa inte slutplanen förrän användaren uttryckligen skriver SKAPA FÄRDIG PLAN. Då ska du sammanställa en detaljerad Android-appspecifikation med skärmar, flöden, datamodell, funktioner, behörigheter, filstruktur och byggsteg.")
-                                    appendLine("Hitta aldrig på att en APK redan har byggts.")
+                                    appendLine("Du är AppForge AI, en lokal Android-appbyggare. Svara på svenska.")
+                                    appendLine("Detta är en fortsättning på ett appprojekt. Följ användarens senaste instruktion och behåll tidigare beslut.")
+                                    appendLine("Om information saknas, ställ en tydlig följdfråga i stället för att gissa.")
                                     appendLine("Appnamn: ${appName.ifBlank { "Namnlös app" }}")
-                                    appendLine("Ursprunglig beskrivning: $description")
-                                    appendLine("Tillåtna behörigheter: " + listOfNotNull(if (allowInternet) "Internet" else null, if (allowCamera) "Kamera" else null, if (allowLocation) "Plats" else null, if (allowMicrophone) "Mikrofon" else null, if (allowFiles) "Filer/lokal lagring" else null).joinToString().ifBlank { "Inga särskilda behörigheter" })
+                                    appendLine("Appens grundbeskrivning: $description")
+                                    appendLine("Tidigare appspecifikation och samtalskontext: $blueprint")
+                                    appendLine("Tillåtna behörigheter: " + listOfNotNull(
+                                        if (allowInternet) "Internet" else null,
+                                        if (allowCamera) "Kamera" else null,
+                                        if (allowLocation) "Plats" else null,
+                                        if (allowMicrophone) "Mikrofon" else null,
+                                        if (allowFiles) "Filer/lokal lagring" else null
+                                    ).joinToString().ifBlank { "Inga särskilda behörigheter" })
                                     appendLine("Egna tillåtna regler: $allowedRules")
                                     appendLine("Egna förbjudna regler: $blockedRules")
-                                    appendLine("Samtalshistorik:")
-                                    dialogue.forEach { (speaker, line) -> appendLine("$speaker: $line") }
-                                    appendLine("Ignorera inte tidigare svar och upprepa inte samma fråga.")
+                                    appendLine("Användarens instruktion: $prompt")
+                                    appendLine("Svara med vad du förstått och fråga vidare om nästa steg behövs. Om användaren ber om en fullständig plan, sammanställ hela den uppdaterade appspecifikationen.")
                                 }
                                 scope.launch {
                                     try {
                                         val answer = onGenerate(request) { progress -> status = progress }
                                         if (answer.isNotBlank()) {
-                                            dialogue.add("AppForge" to answer)
-                                            if (message.equals("SKAPA FÄRDIG PLAN", ignoreCase = true)) {
-                                                blueprint = answer
-                                                status = "Appspecifikationen är skapad."
-                                            } else {
-                                                status = "Svara på AI:ns fråga eller fortsätt beskriva appen."
-                                            }
+                                            blueprint = answer
+                                            status = "AI:n har svarat. Du kan skriva nästa instruktion i rutan."
                                         } else status = "AI:n gav inget svar. Försök igen."
                                     } catch (error: Throwable) {
                                         status = error.message ?: "Det gick inte att kontakta den lokala AI:n."
@@ -219,11 +252,14 @@ fun AppForgeScreen(
                                 }
                             }
                         },
-                        enabled = chatInput.isNotBlank() && !isGenerating,
+                        enabled = typedInstructions.isNotBlank() && !isGenerating,
                         modifier = Modifier.fillMaxWidth().height(48.dp),
                         shape = RoundedCornerShape(12.dp)
-                    ) { Text(if (isGenerating) "AI:n arbetar..." else "Skicka meddelande") }
-                    Text("När du är nöjd skriver du: SKAPA FÄRDIG PLAN", color = ForgeMuted, fontSize = 11.sp)
+                    ) { Text(if (isGenerating) "AI:n arbetar..." else "Skicka instruktion") }
+                }
+
+                if (!buttonsEnabled && !writeInstead) {
+                    Text("Välj antingen «Aktivera befintliga knappar» eller «Skriv instruktioner istället» för att fortsätta.", color = ForgeMuted, fontSize = 12.sp)
                 }
 
                 if (status.isNotBlank()) Text(status, color = ForgeMuted, fontSize = 13.sp)
