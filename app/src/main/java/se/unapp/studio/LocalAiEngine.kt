@@ -79,14 +79,16 @@ class LocalAiEngine(context: Context) {
     suspend fun ask(
         prompt: String,
         recentHistory: List<Pair<Boolean, String>>? = null,
-        testChatMode: Boolean = false
+        testChatMode: Boolean = false,
+        expectedSystemInstruction: String? = null
     ): String {
         require(prompt.isNotBlank()) { "Skriv en fråga först." }
         return mutex.withLock {
             check(loaded && loadedInstruction != null &&
                 activeInstruction == loadedInstruction &&
+                (expectedSystemInstruction == null || loadedInstruction == expectedSystemInstruction) &&
                 inference.state.value is InferenceEngine.State.ModelReady) {
-                "AI-sessionen har bytts till en annan chatt. Ladda Testchattens AI igen."
+                "Fel karaktärsinstruktion är laddad. Ladda om Testchattens AI för den valda karaktären."
             }
             if (recentHistory != null) {
                 inference.setConversationHistory(
@@ -107,24 +109,51 @@ class LocalAiEngine(context: Context) {
             }
 
             var visibleReply = generateReply(prompt)
-            val previousAssistantReply = recentHistory?.lastOrNull { !it.first }?.second?.trim()
+            val previousAssistantReplies = recentHistory.orEmpty()
+                .filter { !it.first }
+                .map { it.second }
+                .takeLast(6)
+
             fun normalizeReply(value: String): String =
                 value.lowercase().replace(Regex("\\s+"), " ").trim()
 
-            // Testchat-only recovery: if the model repeats its immediately previous
-            // answer verbatim, rebuild the context and make one fresh attempt.
+            // Compare the opening words as well as the complete answer. This catches
+            // the common failure where every reply starts identically but continues
+            // with slightly different text.
+            fun openingSignature(value: String): String {
+                val words = value.lowercase()
+                    .replace(Regex("[^\\p{L}\\p{N}]+"), " ")
+                    .trim()
+                    .split(Regex("\\s+"))
+                    .filter { it.isNotBlank() }
+                return if (words.size >= 6) words.take(8).joinToString(" ") else ""
+            }
+
+            val currentOpening = openingSignature(visibleReply)
+            val repeatsFullReply = previousAssistantReplies.any {
+                normalizeReply(it) == normalizeReply(visibleReply)
+            }
+            val repeatsOpening = currentOpening.isNotBlank() &&
+                previousAssistantReplies.any { openingSignature(it) == currentOpening }
+
+            // Testchat-only recovery: detect both identical full replies and repeated
+            // openings, then rebuild the exact same history and reset sampler state.
             if (testChatMode && visibleReply.isNotBlank() &&
-                !previousAssistantReply.isNullOrBlank() &&
-                normalizeReply(visibleReply) == normalizeReply(previousAssistantReply)
+                (repeatsFullReply || repeatsOpening)
             ) {
                 inference.setConversationHistory(
-                    recentHistory!!.takeLast(CHAT_HISTORY_MESSAGE_LIMIT),
+                    recentHistory.orEmpty().takeLast(CHAT_HISTORY_MESSAGE_LIMIT),
                     resetSampler = true
                 )
+                val reason = if (repeatsOpening) {
+                    "Dina första ord upprepades från ett tidigare svar."
+                } else {
+                    "Ditt senaste svar blev identiskt med ett tidigare svar."
+                }
                 visibleReply = generateReply(
-                    "$prompt\n\nVIKTIGT: Ditt senaste svar blev identiskt med ditt förra svar. " +
-                        "Skriv nu ett tydligt annorlunda svar som bemöter användarens senaste meddelande. " +
-                        "Återanvänd inte den förra formuleringen."
+                    "$prompt\\n\\nVIKTIGT: $reason Börja på ett helt nytt sätt. " +
+                        "Använd inte samma inledning, fras eller meningsbyggnad som i dina tidigare svar. " +
+                        "Bemöt användarens senaste meddelande konkret och naturligt."
                 )
             }
             visibleReply.ifBlank { "Jag fick inget tydligt svar den här gången. Försök igen." }
