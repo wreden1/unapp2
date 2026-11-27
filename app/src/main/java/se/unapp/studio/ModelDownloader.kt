@@ -12,7 +12,8 @@ import java.security.MessageDigest
 data class ModelDownloadProgress(
     val downloadedBytes: Long,
     val totalBytes: Long,
-    val percent: Int?
+    val percent: Int?,
+    val stage: String = "Nedladdning"
 )
 
 object ModelDownloader {
@@ -48,7 +49,7 @@ object ModelDownloader {
 
         if (destination.isFile && sha256(destination) == EXPECTED_SHA256) {
             onProgress(100)
-            onDetailedProgress(ModelDownloadProgress(destination.length(), destination.length(), 100))
+            onDetailedProgress(ModelDownloadProgress(destination.length(), destination.length(), 100, "Modellen är klar"))
             return@withContext destination
         }
 
@@ -74,7 +75,9 @@ object ModelDownloader {
 
             val total = connection.contentLengthLong
             var downloaded = 0L
-            onDetailedProgress(ModelDownloadProgress(0L, total, if (total > 0) 0 else null))
+            var lastReportedBytes = 0L
+            var lastReportedPercent = -1
+            onDetailedProgress(ModelDownloadProgress(0L, total, if (total > 0) 0 else null, "Laddar ner modellen"))
 
             connection.inputStream.use { input ->
                 temporary.outputStream().buffered().use { output ->
@@ -86,7 +89,11 @@ object ModelDownloader {
                         downloaded += count
                         val percent = if (total > 0) ((downloaded * 100) / total).toInt().coerceIn(0, 100) else null
                         if (percent != null) onProgress(percent)
-                        onDetailedProgress(ModelDownloadProgress(downloaded, total, percent))
+                        if ((percent != null && percent != lastReportedPercent) || downloaded - lastReportedBytes >= 4L * 1024L * 1024L) {
+                            onDetailedProgress(ModelDownloadProgress(downloaded, total, percent, "Laddar ner modellen"))
+                            lastReportedBytes = downloaded
+                            lastReportedPercent = percent ?: -1
+                        }
                     }
                 }
             }
@@ -95,11 +102,13 @@ object ModelDownloader {
                 "Nedladdningen blev ofullständig."
             }
 
+            onDetailedProgress(ModelDownloadProgress(downloaded, total, if (total > 0) 100 else null, "Kontrollerar modellfilen…"))
             val actualSha256 = sha256(temporary)
             check(actualSha256 == EXPECTED_SHA256) {
                 "Modellfilens kontrollsumma stämmer inte. SHA-256: $actualSha256"
             }
 
+            onDetailedProgress(ModelDownloadProgress(downloaded, total, if (total > 0) 100 else null, "Sparar modellfilen…"))
             if (destination.exists()) destination.delete()
             check(temporary.renameTo(destination)) {
                 "Kunde inte spara den nya GGUF-modellen."
