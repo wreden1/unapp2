@@ -118,7 +118,8 @@ private fun readTestChatCharacters(context: Context): List<UnAppCharacter> {
                 age = item.optString("age", "25"), appearance = item.optString("appearance"),
                 personality = item.optString("personality"), background = item.optString("background"),
                 speakingStyle = item.optString("speakingStyle"),
-                imageUri = item.optString("imageUri").takeIf { it.isNotBlank() }
+                imageUri = item.optString("imageUri").takeIf { it.isNotBlank() },
+                category = item.optString("category", "Kvinna")
             )
         }
     }.getOrDefault(emptyList())
@@ -128,8 +129,9 @@ private fun testChatInstruction(character: UnAppCharacter?): String {
     if (character == null) return TEST_CHAT_DEFAULT_INSTRUCTION
     return """
         IDENTITET OCH ROLL:
-        Du ÄR ${character.name}, en egen fiktiv vuxen person på ${character.age} år.
+        Du ÄR ${character.name}, en egen fiktiv ${character.category.lowercase()} på ${character.age} år.
         Du är inte användaren. Du spelar inte upp användarens repliker.
+        ${if (character.category == "Barn") "Du är ett barn. Håll alla scenarier barnanpassade. Ingen romantisk eller sexuell rollgestaltning." else "Du är en vuxen karaktär."}
         Du ska tänka, känna, minnas och svara utifrån din egen karaktär.
 
         DINA KARAKTÄRSDRAG:
@@ -158,7 +160,7 @@ private fun testChatInstruction(character: UnAppCharacter?): String {
         Säg inte "Jag är också trött" om det inte faktiskt passar din egen karaktär.
         Om användaren berättar något om sig själv ska du inte återberätta det som om det hänt dig.
 
-        Detta är fiktiv rollgestaltning. Karaktären är en vuxen person.
+        Detta är fiktiv rollgestaltning. Följ karaktärstypen och åldern i profilen.
     """.trimIndent()
 }
 
@@ -236,8 +238,8 @@ fun TestChatScreen(onClose: () -> Unit) {
     Column(Modifier.fillMaxSize().background(TCInk).padding(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("TESTCHATT", color = TCAccent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                Text("Egen AI-session · eget långtidsminne", color = TCMuted, fontSize = 10.sp)
+                Text("UNAPP CHATT", color = TCAccent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Text("En gemensam chatt · historik och långtidsminne sparas separat", color = TCMuted, fontSize = 10.sp)
             }
             TextButton(onClick = {
                 scope.launch {
@@ -261,10 +263,10 @@ fun TestChatScreen(onClose: () -> Unit) {
             Spacer(Modifier.width(8.dp))
             Box {
                 OutlinedButton(onClick = { characterMenuExpanded = true }, enabled = !busy && !aiLoading) {
-                    Text(selectedCharacter?.name ?: "Vanlig Testchatt")
+                    Text(selectedCharacter?.name ?: "Vanlig chatt")
                 }
                 DropdownMenu(expanded = characterMenuExpanded, onDismissRequest = { characterMenuExpanded = false }) {
-                    DropdownMenuItem(text = { Text("Vanlig Testchatt") }, onClick = {
+                    DropdownMenuItem(text = { Text("Vanlig chatt") }, onClick = {
                         characterMenuExpanded = false
                         if (selectedCharacterId.isNotEmpty()) {
                             selectedCharacterId = ""
@@ -274,7 +276,7 @@ fun TestChatScreen(onClose: () -> Unit) {
                                 aiLoading = true; aiReady = false; loadError = ""
                                 try {
                                     ai.loadModel(ModelDownloader.modelFile(context), TEST_CHAT_DEFAULT_INSTRUCTION)
-                                    aiReady = true; status = "Vanlig Testchatt är redo."
+                                    aiReady = true; status = "Vanliga chatten är redo."
                                 } catch (error: Throwable) {
                                     loadError = error.message ?: error.javaClass.simpleName
                                     status = "AI:n kunde inte starta."
@@ -293,7 +295,7 @@ fun TestChatScreen(onClose: () -> Unit) {
                                     aiLoading = true; aiReady = false; loadError = ""
                                     try {
                                         ai.loadModel(ModelDownloader.modelFile(context), testChatInstruction(character))
-                                        aiReady = true; status = "Karaktären " + character.name + " är redo i Testchatten."
+                                        aiReady = true; status = "Karaktären " + character.name + " är redo i UnApp-chatten."
                                     } catch (error: Throwable) {
                                         loadError = error.message ?: error.javaClass.simpleName
                                         status = "AI:n kunde inte starta."
@@ -362,7 +364,7 @@ fun TestChatScreen(onClose: () -> Unit) {
 
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (lines.isEmpty()) item {
-                Text("Börja skriva när AI:n är redo. Testchatt har separat historik och långtidsminne.", color = TCMuted, fontSize = 13.sp)
+                Text("Börja skriva när AI:n är redo. Samtalshistoriken sparas i en separat fil på telefonen.", color = TCMuted, fontSize = 13.sp)
             }
             items(lines) { line ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = if (line.fromUser) Arrangement.End else Arrangement.Start) {
@@ -383,7 +385,7 @@ fun TestChatScreen(onClose: () -> Unit) {
                 textStyle = TextStyle(color = Color.White, fontSize = 14.sp),
                 decorationBox = { inner ->
                     Box {
-                        if (draft.isEmpty()) Text("Skriv till testchatten…", color = TCMuted)
+                        if (draft.isEmpty()) Text("Skriv ett meddelande…", color = TCMuted)
                         inner()
                     }
                 }
@@ -407,7 +409,8 @@ fun TestChatScreen(onClose: () -> Unit) {
                                 selectedCharacter?.let { character ->
                                     append(
                                         "AKTIV KARAKTÄR – DETTA GÄLLER DIG I VARJE SVAR:\n" +
-                                        "Du är ${character.name}. Du talar som ${character.name} i jag-form. " +
+                                        "Du är ${character.name}, en fiktiv ${character.category.toLowerCase()} på ${character.age} år. Du talar som ${character.name} i jag-form. " +
+                                        (if (character.category == "Barn") "Håll samtalet barnanpassat och undvik romantiskt eller sexuellt innehåll. " else "Du är en vuxen karaktär. ") +
                                         "Du är samtalspartnern, medan personen som skriver är användaren. " +
                                         "Du får aldrig ta över användarens berättelser, känslor, handlingar eller formuleringar. " +
                                         "Om användaren säger exempelvis ‘jag var på jobbet’ är det användaren som var på jobbet. " +
