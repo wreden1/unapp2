@@ -404,11 +404,32 @@ fun TestChatScreen(onClose: () -> Unit) {
                             memoryText = summary
                             val selectedHistory = store.selectRelevantHistory(updated.dropLast(1), question)
                             val prompt = buildString {
-                                selectedCharacter?.let {
-                                    append("ROLLPÅMINNELSE: Du är karaktären, inte användaren. Användarens meddelande är inte dina ord eller erfarenheter. Svara på innebörden utan att härma eller kopiera användaren.\n\n")
+                                selectedCharacter?.let { character ->
+                                    append(
+                                        "AKTIV KARAKTÄR – DETTA GÄLLER DIG I VARJE SVAR:\\n" +
+                                        "Du är ${character.name}. Du talar som ${character.name} i jag-form. " +
+                                        "Du är samtalspartnern, medan personen som skriver är användaren. " +
+                                        "Du får aldrig ta över användarens berättelser, känslor, handlingar eller formuleringar. " +
+                                        "Om användaren säger exempelvis ‘jag var på jobbet’ är det användaren som var på jobbet. " +
+                                        "Svara på det användaren faktiskt berättar, bidra med en egen naturlig reaktion " +
+                                        "och för samtalet framåt. Upprepa inte användarens mening som ett eget påstående.\\n" +
+                                        "Din personlighet: ${character.personality}. " +
+                                        "Din bakgrund: ${character.background}. " +
+                                        "Ditt sätt att prata: ${character.speakingStyle}.\\n\\n"
+                                    )
                                 }
-                                if (summary.isNotBlank()) append("LÅNGTIDSMINNE FRÅN ÄLDRE SAMTAL (uppgifter om användaren, inte om karaktären):\n" + summary + "\n\n")
-                                append("ANVÄNDARENS SENASTE MEDDELANDE:\n" + question)
+                                if (summary.isNotBlank()) {
+                                    append("BAKGRUNDSM﻿INNE OM ANVÄNDAREN (inte om karaktären):\\n")
+                                    append(summary).append("\\n\\n")
+                                }
+                                append(
+                                    "UPPGIFT: Svara direkt på det senaste användarmeddelandet. " +
+                                    "Använd dialoghistoriken för att förstå sammanhang och vem som sagt vad. " +
+                                    "Om användaren hänvisar till något tidigare, knyt an till rätt tidigare händelse. " +
+                                    "Gissa inte när sammanhanget saknas; fråga då naturligt.\\n\\n"
+                                )
+                                append("SENASTE MEDDELANDE FRÅN ANVÄNDAREN (detta är inte dina ord):\\n")
+                                append(question)
                             }
                             status = "Letar i historiken och skapar svar offline…"
                             val answer = ai.ask(prompt, selectedHistory)
