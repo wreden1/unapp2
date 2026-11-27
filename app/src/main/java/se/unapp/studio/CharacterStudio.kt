@@ -53,7 +53,8 @@ data class UnAppCharacter(
     val personality: String,
     val background: String,
     val speakingStyle: String,
-    val imageUri: String? = null
+    val imageUri: String? = null,
+    val category: String = "Kvinna"
 )
 private data class CharacterLine(val fromUser: Boolean, val text: String, val imagePath: String? = null)
 
@@ -82,7 +83,8 @@ private fun getCharacters(context: Context): List<UnAppCharacter> {
             val o = a.getJSONObject(i)
             UnAppCharacter(o.optString("id"), o.optString("name"), o.optString("age", "25"),
                 o.optString("appearance"), o.optString("personality"), o.optString("background"),
-                o.optString("speakingStyle"), o.optString("imageUri").takeIf { it.isNotBlank() })
+                o.optString("speakingStyle"), o.optString("imageUri").takeIf { it.isNotBlank() },
+                o.optString("category", "Kvinna"))
         }
     } catch (_: Exception) { emptyList() }
 }
@@ -91,8 +93,8 @@ private fun putCharacters(context: Context, list: List<UnAppCharacter>) {
     list.forEach { c ->
         a.put(JSONObject().put("id", c.id).put("name", c.name).put("age", c.age)
             .put("appearance", c.appearance).put("personality", c.personality)
-            .put("background", c.background).put("speakingStyle", c.speakingStyle)
-            .put("imageUri", c.imageUri ?: ""))
+            .put("background", c.background) .put("speakingStyle", c.speakingStyle)
+            .put("imageUri", c.imageUri ?: "").put("category", c.category))
     }
     context.getSharedPreferences(CSPrefs, Context.MODE_PRIVATE).edit().putString("characters", a.toString()).apply()
 }
@@ -115,50 +117,109 @@ fun CharacterStudioScreen(onClose: () -> Unit) {
     var characters by remember { mutableStateOf(getCharacters(context)) }
     var editing by remember { mutableStateOf(false) }
     var active by remember { mutableStateOf<UnAppCharacter?>(null) }
+    var exportTarget by remember { mutableStateOf<UnAppCharacter?>(null) }
+    var fileStatus by remember { mutableStateOf("") }
+
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        val character = exportTarget
+        if (uri != null && character != null) {
+            fileStatus = runCatching {
+                val json = JSONObject()
+                    .put("format", "unapp-character-profile")
+                    .put("version", 1)
+                    .put("id", character.id)
+                    .put("name", character.name)
+                    .put("age", character.age)
+                    .put("category", character.category)
+                    .put("appearance", character.appearance)
+                    .put("personality", character.personality)
+                    .put("background", character.background)
+                    .put("speakingStyle", character.speakingStyle)
+                context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(json.toString(2)) }
+                    ?: error("Kunde inte skriva profilfilen.")
+                "Profilen \${character.name} exporterades."
+            }.getOrElse { "Export misslyckades: \${it.message}" }
+        }
+        exportTarget = null
+    }
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            fileStatus = runCatching {
+                val raw = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                    ?: error("Kunde inte läsa profilfilen.")
+                val json = JSONObject(raw)
+                require(json.optString("format") == "unapp-character-profile") { "Filen är inte en UnApp-karaktärsprofil." }
+                val imported = UnAppCharacter(
+                    id = UUID.randomUUID().toString(),
+                    name = json.optString("name"),
+                    age = json.optString("age", "25"),
+                    appearance = json.optString("appearance"),
+                    personality = json.optString("personality"),
+                    background = json.optString("background"),
+                    speakingStyle = json.optString("speakingStyle"),
+                    category = json.optString("category", "Kvinna")
+                )
+                require(imported.name.isNotBlank()) { "Profilen saknar namn." }
+                characters = characters + imported
+                putCharacters(context, characters)
+                "Profilen \${imported.name} importerades."
+            }.getOrElse { "Import misslyckades: \${it.message}" }
+        }
+    }
+
     Column(Modifier.fillMaxSize().background(CSInk).padding(18.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = { if (active != null) active = null else if (editing) editing = false else onClose() }) {
-                Text("← Back", color = CSAccent)
+            TextButton(onClick = { if (editing) { editing = false; active = null } else onClose() }) {
+                Text("← Tillbaka", color = CSAccent)
             }
             Spacer(Modifier.weight(1f))
-            Text("CHARACTER STUDIO", color = CSAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text("KARAKTÄRSPROFILER", color = CSAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.height(10.dp))
         when {
-            active != null -> CharacterConversation(active!!, onBack = { active = null })
             editing -> CharacterForm(
                 existing = active,
                 onCancel = { editing = false; active = null },
-                onSave = { c -> characters = characters.filterNot { it.id == c.id } + c; putCharacters(context, characters); editing = false; active = null }
+                onSave = { character ->
+                    characters = characters.filterNot { it.id == character.id } + character
+                    putCharacters(context, characters)
+                    editing = false
+                    active = null
+                    fileStatus = "Profilen sparades."
+                }
             )
             else -> {
-                Text("Bring your characters to life", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                Text("Create a personality, choose its picture and start chatting.", color = CSMuted, fontSize = 13.sp)
-                Spacer(Modifier.height(16.dp))
-                Button(onClick = { editing = true }, modifier = Modifier.fillMaxWidth()) { Text("+ Create character") }
+                Text("Dina karaktärer", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                Text("Profilerna kan exporteras som filer och importeras igen i UnApp. Själva chatthistoriken sparas separat.", color = CSMuted, fontSize = 13.sp)
                 Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { editing = true }, modifier = Modifier.weight(1f)) { Text("+ Skapa profil") }
+                    OutlinedButton(onClick = { importLauncher.launch(arrayOf("application/json", "text/*")) }) { Text("Importera") }
+                }
+                if (fileStatus.isNotBlank()) Text(fileStatus, color = CSMuted, fontSize = 11.sp)
+                Spacer(Modifier.height(10.dp))
                 if (characters.isEmpty()) {
                     CSCard {
-                        Text("No characters yet", color = Color.White, fontWeight = FontWeight.Bold)
-                        Text("Your characters and conversations will be saved on this phone.", color = CSMuted, fontSize = 12.sp)
+                        Text("Inga profiler ännu", color = Color.White, fontWeight = FontWeight.Bold)
+                        Text("Skapa en profil eller importera en sparad JSON-fil.", color = CSMuted, fontSize = 12.sp)
                     }
                 } else {
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        items(characters, key = { it.id }) { c ->
+                        items(characters, key = { it.id }) { character ->
                             CSCard {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    CharacterPicture(c.imageUri, Modifier.size(58.dp))
+                                    CharacterPicture(character.imageUri, Modifier.size(58.dp))
                                     Spacer(Modifier.width(12.dp))
                                     Column(Modifier.weight(1f)) {
-                                        Text(c.name, color = Color.White, fontWeight = FontWeight.Bold)
-                                        Text("Age " + c.age, color = CSMuted, fontSize = 11.sp)
-                                        Text(c.personality, color = CSMuted, fontSize = 12.sp, maxLines = 2)
+                                        Text(character.name, color = Color.White, fontWeight = FontWeight.Bold)
+                                        Text("\${character.category} · \${character.age} år", color = CSMuted, fontSize = 11.sp)
+                                        Text(character.personality, color = CSMuted, fontSize = 12.sp, maxLines = 2)
                                     }
                                 }
                                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Button(onClick = { active = c }, modifier = Modifier.weight(1f)) { Text("Chat") }
-                                    OutlinedButton(onClick = { active = c; editing = true }) { Text("Edit") }
-                                    OutlinedButton(onClick = { characters = characters.filterNot { it.id == c.id }; putCharacters(context, characters) }) { Text("Delete") }
+                                    OutlinedButton(onClick = { active = character; editing = true }, modifier = Modifier.weight(1f)) { Text("Redigera") }
+                                    OutlinedButton(onClick = { exportTarget = character; exportLauncher.launch("\${character.name.replace(Regex("[^A-Za-z0-9_-]"), "_")}.unapp-profile.json") }, modifier = Modifier.weight(1f)) { Text("Exportera") }
+                                    OutlinedButton(onClick = { characters = characters.filterNot { it.id == character.id }; putCharacters(context, characters) }) { Text("Ta bort") }
                                 }
                             }
                         }
@@ -179,6 +240,7 @@ private fun CharacterForm(existing: UnAppCharacter?, onCancel: () -> Unit, onSav
     var history by remember(existing?.id) { mutableStateOf(existing?.background ?: "") }
     var voice by remember(existing?.id) { mutableStateOf(existing?.speakingStyle ?: "") }
     var picture by remember(existing?.id) { mutableStateOf(existing?.imageUri) }
+    var category by remember(existing?.id) { mutableStateOf(existing?.category ?: "Kvinna") }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) {
             try { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) { }
@@ -202,6 +264,24 @@ private fun CharacterForm(existing: UnAppCharacter?, onCancel: () -> Unit, onSav
         }
         item { CSField("Name", name, { name = it }, "Character name") }
         item { CSField("Age", age, { age = it }, "25") }
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("Karaktärstyp", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = category == "Kvinna", onCheckedChange = { if (it) category = "Kvinna" })
+                    Text("Kvinna", color = Color.White, fontSize = 12.sp)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = category == "Man", onCheckedChange = { if (it) category = "Man" })
+                    Text("Man", color = Color.White, fontSize = 12.sp)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = category == "Barn", onCheckedChange = { if (it) category = "Barn" })
+                    Text("Barn", color = Color.White, fontSize = 12.sp)
+                }
+                Text("Välj en typ. Endast ett alternativ kan vara markerat.", color = CSMuted, fontSize = 10.sp)
+            }
+        }
         item { CSField("Appearance", appearance, { appearance = it }, "Hair, eyes, clothing, style...") }
         item { CSField("Personality", personality, { personality = it }, "Confident, caring, funny...") }
         item { CSField("Background", history, { history = it }, "History, goals, memories...") }
@@ -212,7 +292,7 @@ private fun CharacterForm(existing: UnAppCharacter?, onCancel: () -> Unit, onSav
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text("Cancel") }
         Button(
-            onClick = { val n = age.toIntOrNull(); if (name.isNotBlank() && n != null && n > 0) onSave(UnAppCharacter(id = existing?.id ?: UUID.randomUUID().toString(), name = name.trim(), age = n.toString(), appearance = appearance, personality = personality, background = history, speakingStyle = voice, imageUri = picture)) },
+            onClick = { val n = age.toIntOrNull(); if (name.isNotBlank() && n != null && n > 0) onSave(UnAppCharacter(id = existing?.id ?: UUID.randomUUID().toString(), name = name.trim(), age = n.toString(), appearance = appearance, personality = personality, background = history, speakingStyle = voice, imageUri = picture, category = category)) },
             enabled = name.isNotBlank() && (age.toIntOrNull() ?: 0) > 0,
             modifier = Modifier.weight(1f)
         ) { Text("Save character") }
