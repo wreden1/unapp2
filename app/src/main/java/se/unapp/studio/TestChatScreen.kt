@@ -413,8 +413,26 @@ fun TestChatScreen(onClose: () -> Unit) {
                             memoryText = summary
                             val selectedHistory = store.selectRelevantHistory(updated.dropLast(1), question)
                             val prompt = buildString {
-                                if (summary.isNotBlank()) append("LÅNGTIDSMINNE FRÅN ÄLDRE SAMTAL:\n" + summary + "\n\n")
-                                append("FRÅGA FRÅN ANVÄNDAREN:\n" + question)
+                                selectedCharacter?.let { character ->
+                                    append(
+                                        """
+                                        VIKTIG ROLLINSTRUKTION: Du ska svara som den fiktiva vuxna personen ${character.name}, inte som en AI-modell eller som Alibaba Cloud.
+                                        Du får aldrig presentera dig som en språkmodell, chatbot eller AI-assistent när du spelar denna karaktär.
+                                        Svara på svenska om inte användaren uttryckligen ber om ett annat språk.
+                                        Namn: ${character.name}
+                                        Ålder: ${character.age}
+                                        Utseende: ${character.appearance}
+                                        Personlighet: ${character.personality}
+                                        Bakgrund: ${character.background}
+                                        Sätt att prata: ${character.speakingStyle}
+                                        Håll dig konsekvent till rollen och svara i första person som karaktären.
+                                        Besvara användarens senaste fråga direkt och naturligt. Hitta inte på att du är den vanliga AI-modellen.
+                                        
+                                        """.trimIndent() + "\\n\\n"
+                                    )
+                                }
+                                if (summary.isNotBlank()) append("LÅNGTIDSMINNE FRÅN ÄLDRE SAMTAL:\\n" + summary + "\\n\\n")
+                                append("FRÅGA FRÅN ANVÄNDAREN:\\n" + question)
                             }
                             status = "Letar i historiken och skapar svar offline…"
                             val answer = ai.ask(prompt, selectedHistory)
