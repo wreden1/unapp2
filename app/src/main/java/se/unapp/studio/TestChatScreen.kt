@@ -114,14 +114,24 @@ private class TestChatMemoryStore(context: Context) {
         val recentStart = (lines.size - RECENT_TURNS).coerceAtLeast(0)
         val recent = lines.drop(recentStart)
         val terms = question.lowercase().split(Regex("[^\\p{L}\\p{N}]+")).filter { it.length >= 3 }.toSet()
-        val relevant = lines.take(recentStart).mapIndexedNotNull { index, line ->
+        // Use the transcript's original line positions as the source of truth.
+        // Timestamps can collide (for example, two messages saved in the same millisecond),
+        // and identical messages are still separate turns and must never be deduplicated.
+        val relevantIndices = lines.take(recentStart).mapIndexedNotNull { index, line ->
             val words = line.text.lowercase().split(Regex("[^\\p{L}\\p{N}]+")).filter { it.length >= 3 }.toSet()
             val score = terms.intersect(words).size
-            if (score > 0) Triple(index, score, line) else null
-        }.sortedWith(compareByDescending<Triple<Int, Int, TestChatLine>> { it.second }.thenByDescending { it.first })
-            .take(6).sortedBy { it.first }.map { it.third }
-        return (relevant + recent).distinctBy { it.timestamp to it.text }.sortedBy { it.timestamp }
-            .takeLast(MAX_CONTEXT_MESSAGES).map { it.fromUser to it.text }
+            if (score > 0) index to score else null
+        }.sortedWith(compareByDescending<Pair<Int, Int>> { it.second }.thenByDescending { it.first })
+            .take(6)
+            .map { it.first }
+        val selectedIndices = (relevantIndices + (recentStart until lines.size))
+            .distinct()
+            .sorted()
+            .takeLast(MAX_CONTEXT_MESSAGES)
+        return selectedIndices.map { index ->
+            val line = lines[index]
+            line.fromUser to line.text
+        }
     }
 
     companion object {
