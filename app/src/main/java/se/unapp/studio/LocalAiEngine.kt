@@ -27,6 +27,7 @@ class LocalAiEngine(context: Context) {
     ) {
         mutex.withLock {
             require(modelFile.isFile) { "AI-modellen hittades inte: ${modelFile.absolutePath}" }
+            val hadActiveSession = activeInstruction != null
             loaded = false
             loadedInstruction = null
             activeInstruction = null
@@ -35,8 +36,11 @@ class LocalAiEngine(context: Context) {
                     it is InferenceEngine.State.ModelReady ||
                     it is InferenceEngine.State.Error
             }
-            if (readyState is InferenceEngine.State.Error) inference.cleanUp()
-            else if (readyState is InferenceEngine.State.ModelReady) inference.cleanUp()
+            if (readyState is InferenceEngine.State.Error) {
+                if (hadActiveSession) inference.cleanUp() else throw readyState.exception
+            } else if (readyState is InferenceEngine.State.ModelReady) {
+                inference.cleanUp()
+            }
 
             inference.loadModel(modelFile.absolutePath)
             inference.setSystemPrompt(characterInstruction)
