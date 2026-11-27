@@ -64,3 +64,5 @@ jobs:
           if-no-files-found: error
 
 # Rebuild Testchatt after character-prompt update.
+
+# Rebuild after Testchatt-only character prompt fix.
